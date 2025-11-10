@@ -221,7 +221,7 @@ class BrowserController:
         const isVisible = rect.width > 0 && rect.height > 0;
         const value = (ta.value || '').trim();
         
-        console.log(`Textarea ${i}: visible=${isVisible}, value="${value.substring(0,30)}"`);
+        console.log(`Textarea ${i}: visible=${isVisible}, value="${value.substring(0,30)}"");
         
         if (isVisible && value) {
             visibleWithContent.push({element: ta, value: value});
@@ -349,95 +349,6 @@ class BrowserController:
             import traceback
             traceback.print_exc()
 
-    def _do_append_text(self, text):
-        """Append arbitrary text to current description (read-only except typing into textarea).
-
-        This is similar to _do_append_x but types the provided `text` string instead.
-        """
-        try:
-            print(f'[APPEND_TEXT] Starting append of: {repr(text)[:50]}')
-            js_find = """() => {
-    const textareas = document.querySelectorAll('textarea[aria-label="Description"]');
-    let visibleWithContent = [];
-    for (const ta of textareas) {
-        try {
-            const rect = ta.getBoundingClientRect();
-            const isVisible = rect.width > 0 && rect.height > 0;
-            const value = (ta.value || '').trim();
-            visibleWithContent.push({element: ta, value: value, rect: rect});
-        } catch (e) {}
-    }
-    let targetTA = null;
-    if (visibleWithContent.length > 0) {
-        const middleIndex = Math.floor(visibleWithContent.length / 2);
-        targetTA = visibleWithContent[middleIndex].element;
-    } else if (textareas.length > 0) {
-        targetTA = textareas[Math.floor(textareas.length / 2)];
-    }
-    if (!targetTA) return null;
-    let rect = targetTA.getBoundingClientRect();
-    // If the element appears off-screen, try to bring it into view and recompute rect
-    try {
-        if (rect.top < 0 || rect.left < 0 || rect.bottom > window.innerHeight || rect.right > window.innerWidth) {
-            try { targetTA.scrollIntoView({block: 'center', inline: 'center'}); } catch(e) {}
-            rect = targetTA.getBoundingClientRect();
-        }
-    } catch (e) {}
-    const currentValue = (targetTA.value || '').trim();
-    return { x: rect.left + rect.width/2, y: rect.top + rect.height/2, currentValue: currentValue };
-}"""
-
-            result = self.page.evaluate(js_find)
-            if not result:
-                print('[APPEND_TEXT] FAILED - No textarea found')
-                return
-
-            x = result['x']
-            y = result['y']
-            current = result['currentValue']
-            print(f'[APPEND_TEXT] Textarea at ({x}, {y}), current value: "{current}"')
-
-            # If returned coordinates are off-screen (negative), try one more time
-            if y is not None and y < 0:
-                print(f"[APPEND_TEXT] WARNING: target y is negative ({y}), re-sampling once")
-                self.page.wait_for_timeout(120)
-                result2 = self.page.evaluate(js_find)
-                if result2 and result2.get('y') is not None and result2.get('y') >= 0:
-                    x = result2['x']
-                    y = result2['y']
-                    current = result2.get('currentValue')
-                    print(f"[APPEND_TEXT] Re-sampled textarea at ({x}, {y}), current value: {repr(current)[:80]}")
-                else:
-                    print('[APPEND_TEXT] FAILED - target remains off-screen after re-sample')
-                    return
-
-            # Click textarea and type
-            self.page.mouse.click(x, y)
-            self.page.wait_for_timeout(300)
-            # Wait until the textarea is actually the active element (prevents typing to the wrong target)
-            try:
-                self.page.wait_for_function(
-                    "() => { const a = document.activeElement; return !!(a && a.getAttribute && a.getAttribute('aria-label') === 'Description'); }",
-                    timeout=2000,
-                )
-                print('[APPEND_TEXT] textarea became active')
-            except Exception:
-                print('[APPEND_TEXT] WARNING: textarea did not become active within timeout')
-            self.page.keyboard.press('End')
-            self.page.wait_for_timeout(150)
-            # Type the provided text
-            self.page.keyboard.type(text)
-            self.page.wait_for_timeout(200)
-
-            # Update local cache
-            self._last_description = (current if current else '') + text
-            print(f'[APPEND_TEXT] SUCCESS - appended {repr(text)}')
-
-        except Exception as e:
-            print(f'[APPEND_TEXT] ERROR: {e}')
-            import traceback
-            traceback.print_exc()
-
     def goto_next_photo(self):
         """Queue next photo command."""
         if not self._running:
@@ -522,19 +433,33 @@ class AssistantUI:
 
         self.add_btn = ttk.Button(btn_frame, text='ADD Space', command=self.add_x, state='disabled')
         self.add_btn.grid(row=0, column=4, sticky='ew', padx=2)
+        # Quick name buttons - load from names.json. Label shows raw name; pushed text excludes parentheses
+        names = []
+        try:
+            names_path = os.path.join(ROOT, 'names.json')
+            with open(names_path, 'r', encoding='utf-8') as nf:
+                data = json.load(nf)
+                if isinstance(data, dict):
+                    names = data.get('names', [])
+                elif isinstance(data, list):
+                    names = data
+        except Exception as e:
+            print(f'[UI] Failed to load names.json: {e}')
+            names = ['(D)ennis', '(L)aura', '(B)ekah']
 
-        # Quick name buttons
-        self.dennis_btn = ttk.Button(btn_frame, text='Dennis ', command=lambda: self.add_name('Dennis '), state='disabled')
-        self.dennis_btn.grid(row=0, column=5, sticky='ew', padx=2)
+        self.name_buttons = []
+        base_col = 5
+        for idx, raw in enumerate(names):
+            label = raw
+            # pushed text removes parentheses characters
+            pushed = ''.join(ch for ch in label if ch not in '()')
+            btn = ttk.Button(btn_frame, text=label, command=(lambda p=pushed: self.add_name(p)), state='disabled')
+            btn.grid(row=0, column=base_col + idx, sticky='ew', padx=2)
+            self.name_buttons.append(btn)
 
-        self.laura_btn = ttk.Button(btn_frame, text='Laura ', command=lambda: self.add_name('Laura '), state='disabled')
-        self.laura_btn.grid(row=0, column=6, sticky='ew', padx=2)
-
-        self.bekah_btn = ttk.Button(btn_frame, text='Bekah ', command=lambda: self.add_name('Bekah '), state='disabled')
-        self.bekah_btn.grid(row=0, column=7, sticky='ew', padx=2)
-
-        # Configure weights
-        for i in range(8):
+        # Configure weights for columns (ensure at least 8 columns for layout)
+        total_cols = max(8, base_col + len(self.name_buttons))
+        for i in range(total_cols):
             btn_frame.columnconfigure(i, weight=1)
 
         # Start polling
@@ -545,105 +470,4 @@ class AssistantUI:
         """Append a given name string to the current description (runs in background)."""
         threading.Thread(target=lambda: self.browser.append_text(name), daemon=True).start()
 
-    def launch_browser(self):
-        """Launch browser in background thread."""
-        def _launch():
-            try:
-                print('[LAUNCH] Starting browser...')
-                self.browser.start(headful=True)
-                print('[LAUNCH] Browser started')
-                self.root.after(0, self._on_browser_ready)
-            except Exception as e:
-                print(f'[LAUNCH] ERROR: {e}')
-                self.root.after(0, lambda: messagebox.showerror('Error', str(e)))
-
-        threading.Thread(target=_launch, daemon=True).start()
-
-    def _on_browser_ready(self):
-        """Called when browser is ready."""
-        self.launch_btn.config(state='disabled')
-        self.prev_btn.config(state='normal')
-        self.next_btn.config(state='normal')
-        self.read_btn.config(state='normal')
-        self.add_btn.config(state='normal')
-        # enable quick-name buttons
-        try:
-            self.dennis_btn.config(state='normal')
-            self.laura_btn.config(state='normal')
-            self.bekah_btn.config(state='normal')
-        except Exception:
-            pass
-        messagebox.showinfo('Browser Ready', 'Please log into Google Photos in the browser.')
-
-    def next_photo(self):
-        """Go to next photo."""
-        threading.Thread(target=self.browser.goto_next_photo, daemon=True).start()
-
-    def prev_photo(self):
-        """Go to previous photo."""
-        threading.Thread(target=self.browser.goto_prev_photo, daemon=True).start()
-
-    def read_current(self):
-        """Read current description."""
-        def _read():
-            try:
-                print('[READ] Requesting description...')
-                desc = self.browser.read_description(timeout=8.0)
-                print(f'[READ] Got: {repr(desc)[:100]}')
-                msg = desc if desc else '(no description)'
-                self.root.after(0, lambda: messagebox.showinfo('Description', msg))
-            except Exception as e:
-                print(f'[READ] ERROR: {e}')
-                self.root.after(0, lambda: messagebox.showerror('Error', str(e)))
-
-        threading.Thread(target=_read, daemon=True).start()
-
-    def add_x(self):
-        """Append X to description."""
-        threading.Thread(target=self.browser.append_x, daemon=True).start()
-
-    def poll_browser_state(self):
-        """Poll browser state and update UI."""
-        try:
-            state = self.browser.get_state()
-            
-            # Update photo URL
-            url = state.get('url')
-            if url:
-                short = url.split('/')[-1]
-                self.photo_label.config(text=f'Photo: {short}')
-            
-            # Update description
-            desc = state.get('description')
-            if desc:
-                preview = desc if len(desc) < 200 else (desc[:197] + '...')
-                self.desc_label.config(text=preview)
-            else:
-                self.desc_label.config(text='(no description)')
-        except Exception as e:
-            print(f'[POLL] ERROR: {e}')
-
-        # Schedule next poll
-        self.root.after(500, self.poll_browser_state)
-
-    def shutdown(self):
-        """Shutdown."""
-        try:
-            self.browser.stop()
-        except Exception:
-            pass
-        try:
-            self.root.destroy()
-        except Exception:
-            pass
-
-
-def main():
-    root = tk.Tk()
-    app = AssistantUI(root)
-    root.protocol('WM_DELETE_WINDOW', app.shutdown)
-    root.mainloop()
-
-
-if __name__ == '__main__':
-    main()
+        

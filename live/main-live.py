@@ -141,6 +141,11 @@ class BrowserController:
                         print(f'[NEXT] Clicking image center at ({int(cx)},{int(cy)})')
                         self.page.mouse.click(cx, cy)
                         self.page.wait_for_timeout(300)
+                        # Dispatch a user-like pointer event sequence to ensure the gallery registers a real gesture
+                        try:
+                            self.page.evaluate("(cx,cy) => { const el = document.elementFromPoint(cx, cy); if(!el) return false; ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(type=>{ el.dispatchEvent(new PointerEvent(type, {bubbles:true, cancelable:true, clientX:cx, clientY:cy})); }); return true; }", cx, cy)
+                        except Exception:
+                            pass
                         break
                 except Exception:
                     continue
@@ -185,6 +190,11 @@ class BrowserController:
                         print(f'[PREV] Clicking image center at ({int(cx)},{int(cy)})')
                         self.page.mouse.click(cx, cy)
                         self.page.wait_for_timeout(300)
+                        # Dispatch a user-like pointer event sequence to ensure the gallery registers a real gesture
+                        try:
+                            self.page.evaluate("(cx,cy) => { const el = document.elementFromPoint(cx, cy); if(!el) return false; ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(type=>{ el.dispatchEvent(new PointerEvent(type, {bubbles:true, cancelable:true, clientX:cx, clientY:cy})); }); return true; }", cx, cy)
+                        except Exception:
+                            pass
                         break
                 except Exception:
                     continue
@@ -522,19 +532,36 @@ class AssistantUI:
 
         self.add_btn = ttk.Button(btn_frame, text='ADD Space', command=self.add_x, state='disabled')
         self.add_btn.grid(row=0, column=4, sticky='ew', padx=2)
+        # Quick name buttons - load from names.json. Label shows raw name; pushed text excludes parentheses
+        names = []
+        try:
+            names_path = os.path.join(ROOT, '..', 'poc', 'names.json')
+            # fallback to sibling poc folder if running from live/
+            if not os.path.exists(names_path):
+                names_path = os.path.join(ROOT, 'names.json')
+            with open(names_path, 'r', encoding='utf-8') as nf:
+                data = json.load(nf)
+                if isinstance(data, dict):
+                    names = data.get('names', [])
+                elif isinstance(data, list):
+                    names = data
+        except Exception as e:
+            print(f'[UI] Failed to load names.json: {e}')
+            names = ['(D)ennis', '(L)aura', '(B)ekah']
 
-        # Quick name buttons
-        self.dennis_btn = ttk.Button(btn_frame, text='Dennis ', command=lambda: self.add_name('Dennis '), state='disabled')
-        self.dennis_btn.grid(row=0, column=5, sticky='ew', padx=2)
+        self.name_buttons = []
+        base_col = 5
+        for idx, raw in enumerate(names):
+            label = raw
+            pushed = ''.join(ch for ch in label if ch not in '()')
+            # create button; keep it disabled until browser ready
+            btn = ttk.Button(btn_frame, text=label, command=(lambda p=pushed: self.add_name(p)), state='disabled')
+            btn.grid(row=0, column=base_col + idx, sticky='ew', padx=2)
+            self.name_buttons.append(btn)
 
-        self.laura_btn = ttk.Button(btn_frame, text='Laura ', command=lambda: self.add_name('Laura '), state='disabled')
-        self.laura_btn.grid(row=0, column=6, sticky='ew', padx=2)
-
-        self.bekah_btn = ttk.Button(btn_frame, text='Bekah ', command=lambda: self.add_name('Bekah '), state='disabled')
-        self.bekah_btn.grid(row=0, column=7, sticky='ew', padx=2)
-
-        # Configure weights
-        for i in range(8):
+        # Configure weights for columns (ensure enough columns for names)
+        total_cols = max(8, base_col + len(self.name_buttons))
+        for i in range(total_cols):
             btn_frame.columnconfigure(i, weight=1)
 
         # Start polling
@@ -566,11 +593,13 @@ class AssistantUI:
         self.next_btn.config(state='normal')
         self.read_btn.config(state='normal')
         self.add_btn.config(state='normal')
-        # enable quick-name buttons
+        # enable quick-name buttons (if dynamic list present)
         try:
-            self.dennis_btn.config(state='normal')
-            self.laura_btn.config(state='normal')
-            self.bekah_btn.config(state='normal')
+            for b in getattr(self, 'name_buttons', []):
+                try:
+                    b.config(state='normal')
+                except Exception:
+                    pass
         except Exception:
             pass
         messagebox.showinfo('Browser Ready', 'Please log into Google Photos in the browser.')
