@@ -599,94 +599,18 @@ class BrowserController:
             print(f'Previous navigation failed: {e}')
 
     def _do_apply(self, text):
-        """Apply action: click textarea and append 'X' using keyboard."""
         try:
             try:
                 self.page.bring_to_front()
-            except Exception as e:
-                print(f'_do_apply: bring_to_front error: {e}')
-            
-            print('_do_apply: starting...')
-            
-            # Find the middle textarea (current photo)
-            js_find = """() => {
-    const textareas = document.querySelectorAll('textarea[aria-label="Description"]');
-    console.log('Found textareas:', textareas.length);
-    let visibleWithContent = [];
-    
-    for (let i = 0; i < textareas.length; i++) {
-        const ta = textareas[i];
-        const rect = ta.getBoundingClientRect();
-        const isVisible = rect.width > 0 && rect.height > 0;
-        const value = (ta.value || '').trim();
-        
-        console.log(`Textarea ${i}: visible=${isVisible}, hasContent=${!!value}, value="${value.substring(0,30)}"`);
-        
-        if (isVisible && value) {
-            visibleWithContent.push({element: ta, value: value, rect: rect});
-        }
-    }
-    
-    console.log('Visible with content:', visibleWithContent.length);
-    let targetTA = null;
-    if (visibleWithContent.length > 0) {
-        const middleIndex = Math.floor(visibleWithContent.length / 2);
-        targetTA = visibleWithContent[middleIndex].element;
-        console.log('Using middle textarea from visible:', middleIndex);
-    } else if (textareas.length > 0) {
-        targetTA = textareas[Math.floor(textareas.length / 2)];
-        console.log('Using middle textarea from all');
-    }
-    
-    if (!targetTA) {
-        console.log('No textarea found!');
-        return null;
-    }
-    
-    // Return position to click
-    const rect = targetTA.getBoundingClientRect();
-    console.log('Textarea rect:', rect);
-    return {
-        x: rect.left + rect.width / 2,
-        y: rect.top + rect.height / 2,
-        currentValue: (targetTA.value || '').trim()
-    };
-}"""
-            
-            result = self.page.evaluate(js_find)
-            print(f'_do_apply: JS result -> {result}')
-            
-            if not result:
-                print('_do_apply: FAILED - No textarea found')
-                return
-            
-            x = result['x']
-            y = result['y']
-            current = result['currentValue']
-            
-            print(f'_do_apply: Found textarea with value "{current}" at ({x}, {y})')
-            
-            # Click on the textarea to focus it
-            print(f'_do_apply: Clicking at ({x}, {y})')
-            self.page.mouse.click(x, y)
-            self.page.wait_for_timeout(200)
-            
-            # Move to end of text
-            print('_do_apply: Pressing End key')
-            self.page.keyboard.press('End')
-            self.page.wait_for_timeout(100)
-            
-            # Type 'X'
-            print('_do_apply: Typing X')
-            self.page.keyboard.type('X')
-            self.page.wait_for_timeout(200)
-            
-            print(f'_do_apply: SUCCESS - appended X to "{current}"')
-                
+            except Exception:
+                pass
+            # Example pseudocode; replace selector with the real one after inspection
+            # self.page.click('button[aria-label="Info"]')
+            # self.page.fill('textarea.description-selector', text)
+            # self.page.keyboard.press('Enter')
+            print('apply_description (worker) ->', text)
         except Exception as e:
-            print(f'_do_apply: error -> {e}')
-            import traceback
-            traceback.print_exc()
+            print('apply_description error', e)
 
     def _do_inspect(self):
         try:
@@ -1051,7 +975,6 @@ class BrowserController:
 
 class AssistantUI:
     def __init__(self, root):
-        print('AssistantUI: INITIALIZING...')
         self.root = root
         root.title('Google Photos Tagging Assistant - POC')
         self.names = load_names()
@@ -1061,8 +984,6 @@ class AssistantUI:
         # Build UI
         top = ttk.Frame(root, padding=10)
         top.grid(row=0, column=0, sticky='nsew')
-        
-        print('AssistantUI: Building UI...')
 
         # Photo info label
         self.photo_label = ttk.Label(top, text='Photo: (open Google Photos in the browser)')
@@ -1103,7 +1024,7 @@ class AssistantUI:
         next_btn = ttk.Button(top, text='Next', command=self.next_photo)
         next_btn.grid(row=4, column=3, sticky='ew', pady=(8,0))
 
-        apply_btn = ttk.Button(top, text='ADD (append X)', command=self.apply_selected_names)
+        apply_btn = ttk.Button(top, text='Apply Selected Name(s)', command=self.apply_selected_names)
         apply_btn.grid(row=5, column=0, columnspan=3, sticky='ew', pady=(8,0))
 
         # Layout expand
@@ -1179,15 +1100,12 @@ class AssistantUI:
         return ', '.join(chosen)
 
     def apply_selected_names(self):
-        print('apply_selected_names: CLICKED!')
-        # Simply send apply command - don't use selected names anymore
-        # The apply action just appends 'X' to the current description
-        try:
-            self.browser.apply_description('')
-            print('apply_selected_names: sent to browser')
-        except Exception as e:
-            print(f'apply_selected_names: error -> {e}')
-            messagebox.showerror('Apply Error', str(e))
+        text = self.selected_names_text()
+        if not text:
+            messagebox.showwarning('No names selected', 'Choose one or more names to apply.')
+            return
+        # Send to browser controller
+        self.browser.apply_description(text)
 
     def focus_browser(self):
         try:
