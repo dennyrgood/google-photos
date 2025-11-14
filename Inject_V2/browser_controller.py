@@ -328,6 +328,10 @@ class BrowserController:
                 if found_name and found_name[0:4].isdigit():
                     print(f'[NAMES] Skipping year-prefixed text: "{found_name}"')
                     continue
+
+                if found_name and found_name.startswith("0"):
+                    print(f'[NAMES] Skipping name starting with 0: "{found_name}"')
+                    continue
                 
                 # Check special cases from names.json
                 if found_name in special_cases:
@@ -941,9 +945,9 @@ class BrowserController:
             except Exception:
                 print('[DELETE_ALL] WARNING: textarea did not become active within timeout')
             
-            # Multiple backspaces to clear all (40 should clear any description)
-            print('[DELETE_ALL] Pressing backspace 40 times to clear description')
-            for _ in range(40):
+            # Multiple backspaces to clear all (50 should clear any description)
+            print('[DELETE_ALL] Pressing backspace 50 times to clear description')
+            for _ in range(50):
                 self.page.keyboard.press('Backspace')
             self.page.wait_for_timeout(5)
             print('[DELETE_ALL] SUCCESS')
