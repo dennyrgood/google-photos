@@ -17,16 +17,17 @@ class KeystrokeHandler:
     
     def _load_shortcuts(self):
         """Load shortcuts from names.json and register defaults."""
-        # Register default navigation shortcuts
-        self.shortcuts['n'] = ('next', None)
-        self.shortcuts['N'] = ('next', None)
-        self.shortcuts['p'] = ('prev', None)
-        self.shortcuts['P'] = ('prev', None)
+        # Arrow keys for navigation
+        self.shortcuts['Right'] = ('next', None)
+        self.shortcuts['Left'] = ('prev', None)
         
-        # Register space/add shortcuts
-        self.shortcuts['a'] = ('space', None)
-        self.shortcuts['A'] = ('space', None)
-        self.shortcuts[' '] = ('space', None)
+        # Delete all shortcut
+        self.shortcuts['='] = ('delete_all', None)
+        
+        # Tab to add "Dennis " and go next
+        self.shortcuts['Tab'] = ('tab_dennis', None)
+        
+        # Note: n, N, p, P are NOT registered - they pass through as natural keystrokes
         
         # Load names from names.json
         names = self._load_names()
@@ -39,22 +40,28 @@ class KeystrokeHandler:
             match = re.search(r'\((.)\)', label)
             if match:
                 shortcut_key = match.group(1)
-                # Single letter shortcuts
-                self.shortcuts[shortcut_key.lower()] = ('name', pushed)
-                self.shortcuts[shortcut_key.upper()] = ('name', pushed)
-                # Ctrl+letter shortcuts for consistency
+                # Only register Ctrl+letter shortcuts (not single letters - those are for natural typing)
                 self.shortcuts[(shortcut_key.lower(), 'ctrl')] = ('name', pushed)
                 self.shortcuts[(shortcut_key.upper(), 'ctrl')] = ('name', pushed)
-                print(f'[KEYSTROKE] Registered shortcut: {shortcut_key} -> {pushed}')
                 print(f'[KEYSTROKE] Registered Ctrl+{shortcut_key} -> {pushed}')
             
-            # Extract numbered groups like "(1) Dennis Laura "
+            # Extract numbered groups like "(1) Dennis Laura " and strip numeric prefix
             num_match = re.search(r'\((\d+)\)', label)
             if num_match:
                 group_num = num_match.group(1)
-                # Register Ctrl+number for numbered groups
-                self.shortcuts[(group_num, 'ctrl')] = ('name', pushed)
-                print(f'[KEYSTROKE] Registered Ctrl+{group_num} -> {pushed}')
+                # Strip the numeric prefix from the label first, then remove parentheses
+                # e.g., "(1) Dennis Laura " becomes "Dennis Laura "
+                stripped_label = re.sub(r'^\(\d+\)\s*', '', label).strip()
+                if stripped_label:  # Only register if there's content after stripping
+                    # Register both Ctrl+number and just number
+                    self.shortcuts[(group_num, 'ctrl')] = ('name', stripped_label + ' ')
+                    self.shortcuts[group_num] = ('name', stripped_label + ' ')
+                    print(f'[KEYSTROKE] Registered {group_num} -> {stripped_label} (stripped)')
+                else:
+                    # Empty group, register as-is
+                    self.shortcuts[(group_num, 'ctrl')] = ('name', pushed)
+                    self.shortcuts[group_num] = ('name', pushed)
+                    print(f'[KEYSTROKE] Registered {group_num} -> (empty)')
     
     def _load_names(self):
         """Load names from names.json file."""
@@ -101,18 +108,28 @@ class KeystrokeHandler:
         names = ['(D)ennis', '(L)aura', '(B)ekah']
         return names
     
-    def on_key_press(self, key, ctrl=False, state=0):
+    def on_key_press(self, key, ctrl=False, state=0, keycode=None, keysym=None):
         """Handle key press event and return action tuple or None.
         
         Args:
             key: The key character or name (e.g., '1', 'd', 'BackSpace', 'Delete')
             ctrl: Boolean indicating if Ctrl modifier is pressed
             state: Raw event state bitmask for detecting Fn+Delete on Mac
+            keycode: Numeric keycode (e.g., 0x33 for backspace, 0x77 for delete all)
+            keysym: Tkinter keysym name (e.g., 'BackSpace', 'Delete')
         
         Returns:
             Tuple of (action_type, action_data) or None
         """
-        # Try direct lookup first
+        # Handle BackSpace and Delete keysyms FIRST (most reliable, before keycode)
+        if keysym == 'BackSpace':
+            print('[DELETE_TYPE] BackSpace key detected - deleting one char')
+            return ('backspace', None)
+        elif keysym == 'Delete':
+            print('[DELETE_TYPE] Delete key detected - clearing entire description')
+            return ('delete_all', None)
+        
+        # Try direct lookup first (before keycode, to avoid '3' being confused with 0x33 keycode)
         if key in self.shortcuts:
             return self.shortcuts[key]
         
@@ -122,25 +139,7 @@ class KeystrokeHandler:
             if ctrl_key in self.shortcuts:
                 return self.shortcuts[ctrl_key]
         
-        # Handle Delete key variants
-        if key == 'Delete':
-            # Fn+Delete (state=0x40 on Mac) = clear entire description
-            if state & 0x40:
-                print('[DELETE_TYPE] Fn+Delete detected - clearing entire description')
-                return ('delete_all', None)
-            # Ctrl+Delete or Shift+Delete = delete 50 chars from end
-            elif ctrl or (state & 0x01):  # 0x01 is Shift
-                print('[DELETE_TYPE] Ctrl/Shift+Delete detected - deleting 50 chars')
-                return ('delete_50', None)
-            # Plain Delete = delete previous character
-            else:
-                print('[DELETE_TYPE] Plain Delete detected - deleting one char')
-                return ('backspace', None)
-        
-        # Check for backspace key 'x' or 'X'
-        if key.lower() == 'x':
-            return ('backspace', None)
-        
+        # No match found - return None for natural typing
         return None
     
     def get_all_shortcuts(self):

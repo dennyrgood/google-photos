@@ -185,6 +185,179 @@ class BrowserController:
             import traceback
             traceback.print_exc()
 
+    def _position_cursor_at_end(self):
+        """Position cursor at END of description textarea."""
+        try:
+            print('[CURSOR] Positioning cursor at END...')
+            
+            js_focus_and_end = """() => {
+    const textareas = document.querySelectorAll('textarea[aria-label="Description"]');
+    let candidates = [];
+    const centerX = window.innerWidth / 2;
+    const centerY = window.innerHeight / 2;
+    
+    for (const ta of textareas) {
+        try {
+            const rect = ta.getBoundingClientRect();
+            const isVisible = rect.width > 0 && rect.height > 0;
+            if (!isVisible) continue;
+            
+            const value = (ta.value || '').trim();
+            const taCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+            const distance = Math.sqrt(Math.pow(taCenter.x - centerX, 2) + Math.pow(taCenter.y - centerY, 2));
+            const style = window.getComputedStyle(ta);
+            const zIndex = parseInt(style.zIndex) || 0;
+            
+            candidates.push({ element: ta, value: value, rect: rect, distance: distance, zIndex: zIndex, hasContent: value.length > 0 });
+        } catch (e) {}
+    }
+    
+    if (candidates.length === 0) return null;
+    
+    candidates.sort((a, b) => {
+        if (a.hasContent !== b.hasContent) return b.hasContent ? 1 : -1;
+        if (Math.abs(a.distance - b.distance) > 50) return a.distance - b.distance;
+        return b.zIndex - a.zIndex;
+    });
+    
+    const target = candidates[0];
+    target.element.focus();
+    target.element.selectionStart = target.element.value.length;
+    target.element.selectionEnd = target.element.value.length;
+    
+    return { x: target.rect.left + target.rect.width/2, y: target.rect.top + target.rect.height/2, textLength: target.element.value.length };
+}"""
+            
+            result = self.page.evaluate(js_focus_and_end)
+            if result:
+                print(f'[CURSOR] Cursor positioned at END (text length: {result["textLength"]})')
+            else:
+                print('[CURSOR] No textarea found')
+                
+        except Exception as e:
+            print(f'[CURSOR] ERROR: {e}')
+
+    def _extract_and_add_names(self):
+        """Extract names from webpage section and add to description if not already there."""
+        try:
+            print('[NAMES] Extracting names from webpage...')
+            
+            # Load names and special cases from names.json
+            import json
+            with open('names.json') as f:
+                data = json.load(f)
+                names_list = data.get('names', [])
+                special_cases = data.get('special_cases', {})
+            
+            print(f'[NAMES] Loaded special cases: {special_cases}')
+            
+            # Extract clean names (without parentheses)
+            clean_names = []
+            for name_entry in names_list:
+                clean = ''.join(c for c in name_entry if c not in '()').strip()
+                if clean and clean != '4':  # Skip empty and placeholder
+                    clean_names.append(clean)
+            
+            print(f'[NAMES] Searching for names: {clean_names}')
+            
+            # Find ALL names from div or span (return array)
+            # Only extract from the LAST (most recent) occurrence to avoid cached elements
+            js_find_names = """() => {
+    let foundNames = [];
+    
+    // Get ALL div.DgVY7 and span.Y8X4Pc elements
+    // Google Photos caches prev/next photos, so we take the LAST ones (most recent/active)
+    const allDivs = document.querySelectorAll('div.DgVY7');
+    const allSpans = document.querySelectorAll('span.Y8X4Pc');
+    
+    // If we have multiple, take only the last batch (current photo)
+    // This avoids picking up cached prev/next photo data
+    if (allDivs.length > 0) {
+        const lastDiv = allDivs[allDivs.length - 1];
+        const nameDiv = lastDiv.querySelector('div.AJM7gb');
+        if (nameDiv && nameDiv.textContent) {
+            foundNames.push(nameDiv.textContent.trim());
+        }
+    }
+    
+    if (allSpans.length > 0) {
+        // For spans, take the last few (could be multiple names)
+        // Get the ones that are visible/in viewport
+        for (let i = Math.max(0, allSpans.length - 5); i < allSpans.length; i++) {
+            const span = allSpans[i];
+            const rect = span.getBoundingClientRect();
+            // Only include if visible or near viewport
+            if (rect.height > 0 && rect.width > 0) {
+                if (span.textContent) {
+                    foundNames.push(span.textContent.trim());
+                }
+            }
+        }
+    }
+    
+    return foundNames.length > 0 ? foundNames : null;
+}"""
+            
+            found_names = self.page.evaluate(js_find_names)
+            
+            if not found_names:
+                print('[NAMES] No name sections found on webpage')
+                return
+            
+            print(f'[NAMES] Found names in webpage: {found_names}')
+            
+            # Get current description
+            current_desc = self._sample_description()
+            if not current_desc:
+                current_desc = ''
+            
+            print(f'[NAMES] Current description: {repr(current_desc)[:80]}')
+            
+            # Position cursor at END before adding names
+            print('[NAMES] Positioning cursor at END before adding names')
+            self._position_cursor_at_end()
+            
+            # Process each found name
+            for found_name in found_names:
+                print(f'[NAMES] Processing: {repr(found_name)}')
+                
+                # Normalize spaces: strip and collapse multiple spaces to single
+                found_name = ' '.join(found_name.split())
+                
+                # Skip year-prefixed text (e.g., "2025 05 Trip to US")
+                if found_name and found_name[0:4].isdigit():
+                    print(f'[NAMES] Skipping year-prefixed text: "{found_name}"')
+                    continue
+                
+                # Check special cases from names.json
+                if found_name in special_cases:
+                    mapped_name = special_cases[found_name]
+                    print(f'[NAMES] Special case: "{found_name}" -> "{mapped_name}"')
+                    found_name = mapped_name
+                
+                # Check if name is already in description (normalize for comparison)
+                desc_normalized = ' '.join(current_desc.split())
+                if found_name in desc_normalized:
+                    print(f'[NAMES] "{found_name}" already in description, skipping')
+                    continue
+                
+                # Position cursor at END before each append (ensure we stay at end)
+                self._position_cursor_at_end()
+                
+                # Add the name with space before it to description (regardless of names.json)
+                print(f'[NAMES] Adding " {found_name}" to description')
+                self.append_text(' ' + found_name + ' ')
+                
+                # Update current description for next iteration
+                current_desc += ' ' + found_name + ' '
+            
+            # Position cursor at END after all names added
+            print('[NAMES] Positioning cursor at END after adding all names')
+            self._position_cursor_at_end()
+            
+        except Exception as e:
+            print(f'[NAMES] ERROR: {e}')
+
     def _do_next(self):
         """Navigate to next photo."""
         try:
@@ -207,7 +380,7 @@ class BrowserController:
                             self.page.mouse.click(cx, cy)
                         except Exception:
                             pass
-                        self.page.wait_for_timeout(300)
+                        self.page.wait_for_timeout(15)
                         try:
                             self.page.evaluate("(cx,cy) => { const el = document.elementFromPoint(cx, cy); if(!el) return false; ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(type=>{ el.dispatchEvent(new PointerEvent(type, {bubbles:true, cancelable:true, clientX:cx, clientY:cy})); }); return true; }", cx, cy)
                         except Exception:
@@ -227,7 +400,7 @@ class BrowserController:
                         self.page.mouse.click(cx, cy)
                     except Exception:
                         pass
-                    self.page.wait_for_timeout(300)
+                    self.page.wait_for_timeout(15)
                     try:
                         self.page.evaluate("() => { const cx = Math.floor(window.innerWidth/2); const cy = Math.floor(window.innerHeight/2); const el = document.elementFromPoint(cx, cy); if(!el) return false; ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(type=>{ el.dispatchEvent(new PointerEvent(type, {bubbles:true, cancelable:true, clientX:cx, clientY:cy})); }); return true; }")
                     except Exception:
@@ -238,7 +411,7 @@ class BrowserController:
             print('[NEXT] Pressing ArrowRight')
             self.page.keyboard.press('ArrowRight')
             
-            self.page.wait_for_timeout(1500)
+            self.page.wait_for_timeout(5)
             
             try:
                 self._last_url = self.page.url
@@ -248,6 +421,13 @@ class BrowserController:
             desc = self._sample_description()
             self._last_description = desc
             print(f'[NEXT] New description: {repr(desc)[:100]}')
+            
+            # Position cursor at END of description
+            print('[NEXT] Positioning cursor at END of description')
+            self._position_cursor_at_end()
+            
+            # Extract and add names from webpage
+            self._extract_and_add_names()
             
         except Exception as e:
             print(f'[NEXT] ERROR: {e}')
@@ -273,7 +453,7 @@ class BrowserController:
                             self.page.mouse.click(cx, cy)
                         except Exception:
                             pass
-                        self.page.wait_for_timeout(300)
+                        self.page.wait_for_timeout(15)
                         try:
                             self.page.evaluate("(cx,cy) => { const el = document.elementFromPoint(cx, cy); if(!el) return false; ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(type=>{ el.dispatchEvent(new PointerEvent(type, {bubbles:true, cancelable:true, clientX:cx, clientY:cy})); }); return true; }", cx, cy)
                         except Exception:
@@ -293,7 +473,7 @@ class BrowserController:
                         self.page.mouse.click(cx, cy)
                     except Exception:
                         pass
-                    self.page.wait_for_timeout(300)
+                    self.page.wait_for_timeout(15)
                     try:
                         self.page.evaluate("() => { const cx = Math.floor(window.innerWidth/2); const cy = Math.floor(window.innerHeight/2); const el = document.elementFromPoint(cx, cy); if(!el) return false; ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(type=>{ el.dispatchEvent(new PointerEvent(type, {bubbles:true, cancelable:true, clientX:cx, clientY:cy})); }); return true; }")
                     except Exception:
@@ -304,7 +484,7 @@ class BrowserController:
             print('[PREV] Pressing ArrowLeft')
             self.page.keyboard.press('ArrowLeft')
             
-            self.page.wait_for_timeout(1500)
+            self.page.wait_for_timeout(5)
             
             try:
                 self._last_url = self.page.url
@@ -314,6 +494,13 @@ class BrowserController:
             desc = self._sample_description()
             self._last_description = desc
             print(f'[PREV] New description: {repr(desc)[:100]}')
+            
+            # Position cursor at END of description
+            print('[PREV] Positioning cursor at END of description')
+            self._position_cursor_at_end()
+            
+            # Extract and add names from webpage
+            self._extract_and_add_names()
             
         except Exception as e:
             print(f'[PREV] ERROR: {e}')
@@ -466,7 +653,7 @@ class BrowserController:
             
             print(f'[APPEND_X] Clicking at ({x}, {y})')
             self.page.mouse.click(x, y)
-            self.page.wait_for_timeout(200)
+            self.page.wait_for_timeout(10)
 
             try:
                 self.page.evaluate("(cx,cy) => { const el = document.elementFromPoint(cx, cy); if(el && el.tagName && el.tagName.toLowerCase() === 'textarea') { el.focus(); el.selectionStart = el.value.length; el.selectionEnd = el.value.length; return true; } const t = document.querySelector('textarea[aria-label=Description]'); if(t){ t.focus(); t.selectionStart = t.value.length; t.selectionEnd = t.value.length; return true; } return false; }", x, y)
@@ -484,15 +671,15 @@ class BrowserController:
             
             print('[APPEND_X] Pressing End key')
             self.page.keyboard.press('End')
-            self.page.wait_for_timeout(150)
+            self.page.wait_for_timeout(5)
             
             print('[APPEND_X] Typing space')
             self.page.keyboard.type(' ')
-            self.page.wait_for_timeout(200)
+            self.page.wait_for_timeout(10)
             
-            print(f'[APPEND_X] SUCCESS - appended X to "{current}"')
+            print(f'[APPEND_X] SUCCESS - appended space to "{current}"')
             
-            self._last_description = (current if current else '') + 'X'
+            self._last_description = (current if current else '') + ' '
             
         except Exception as e:
             print(f'[APPEND_X] ERROR: {e}')
@@ -559,7 +746,7 @@ class BrowserController:
 
             if y is not None and y < 0:
                 print(f"[APPEND_TEXT] WARNING: target y is negative ({y}), re-sampling once")
-                self.page.wait_for_timeout(120)
+                self.page.wait_for_timeout(5)
                 result2 = self.page.evaluate(js_find)
                 if result2 and result2.get('y') is not None and result2.get('y') >= 0:
                     x = result2['x']
@@ -571,7 +758,7 @@ class BrowserController:
                     return
 
             self.page.mouse.click(x, y)
-            self.page.wait_for_timeout(300)
+            self.page.wait_for_timeout(15)
             
             try:
                 self.page.evaluate("(cx,cy) => { const el = document.elementFromPoint(cx, cy); if(el && el.tagName && el.tagName.toLowerCase() === 'textarea') { el.focus(); el.selectionStart = el.value.length; el.selectionEnd = el.value.length; return true; } const t = document.querySelector('textarea[aria-label=Description]'); if(t){ t.focus(); t.selectionStart = t.value.length; t.selectionEnd = t.value.length; return true; } return false; }", x, y)
@@ -589,14 +776,14 @@ class BrowserController:
             
             print('[APPEND_TEXT] Pressing End key to move cursor to end')
             self.page.keyboard.press('End')
-            self.page.wait_for_timeout(150)
+            self.page.wait_for_timeout(5)
             
             print(f'[APPEND_TEXT] Typing text: {repr(text)}')
-            self.page.keyboard.type(text + ' ')
-            self.page.wait_for_timeout(200)
+            self.page.keyboard.type(text)
+            self.page.wait_for_timeout(10)
 
             self._last_description = (current if current else '') + text
-            print(f'[APPEND_SUCCESS] Appended {repr(text)} to description')
+            print(f'[APPEND_SUCCESS] Appended {repr(text)} to description (no trailing space)')
 
         except Exception as e:
             print(f'[APPEND_TEXT] ERROR: {e}')
@@ -655,7 +842,7 @@ class BrowserController:
             
             # Click and focus the textarea
             self.page.mouse.click(x, y)
-            self.page.wait_for_timeout(300)
+            self.page.wait_for_timeout(15)
             
             # Focus and position cursor at end
             try:
@@ -676,7 +863,7 @@ class BrowserController:
             # Send backspace
             print('[BACKSPACE] Sending backspace')
             self.page.keyboard.press('Backspace')
-            self.page.wait_for_timeout(100)
+            self.page.wait_for_timeout(15)
             print('[BACKSPACE] SUCCESS')
             
         except Exception as e:
@@ -736,7 +923,7 @@ class BrowserController:
             
             # Click and focus the textarea
             self.page.mouse.click(x, y)
-            self.page.wait_for_timeout(300)
+            self.page.wait_for_timeout(15)
             
             # Focus textarea
             try:
@@ -754,12 +941,11 @@ class BrowserController:
             except Exception:
                 print('[DELETE_ALL] WARNING: textarea did not become active within timeout')
             
-            # Select all and delete
-            print('[DELETE_ALL] Selecting all text and deleting')
-            self.page.keyboard.press('Control+A')
-            self.page.wait_for_timeout(100)
-            self.page.keyboard.press('Delete')
-            self.page.wait_for_timeout(100)
+            # Multiple backspaces to clear all (40 should clear any description)
+            print('[DELETE_ALL] Pressing backspace 40 times to clear description')
+            for _ in range(40):
+                self.page.keyboard.press('Backspace')
+            self.page.wait_for_timeout(5)
             print('[DELETE_ALL] SUCCESS')
             
             self._last_description = ''
@@ -822,7 +1008,7 @@ class BrowserController:
             
             # Click and focus the textarea
             self.page.mouse.click(x, y)
-            self.page.wait_for_timeout(300)
+            self.page.wait_for_timeout(15)
             
             # Focus textarea
             try:
@@ -844,7 +1030,7 @@ class BrowserController:
             print('[DELETE_50] Deleting 50 characters from end')
             for _ in range(50):
                 self.page.keyboard.press('Backspace')
-            self.page.wait_for_timeout(100)
+            self.page.wait_for_timeout(15)
             print('[DELETE_50] SUCCESS')
             
             new_length = max(0, len(current) - 50)

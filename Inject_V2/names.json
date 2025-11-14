@@ -1,20 +1,27 @@
 {
     "_comment": "List of names with initials in parentheses",
-    "_comment_do_not_use": "(P)rev, (N)ext are reserved",
+    "_comment_do_not_use": "(P)rev, (N)ext are reserved - they pass through as natural typing",
     "_comment_ck_syntax_carefully": "Make sure the commas are correct",
     "names": [
         "(D)ennis ",
         "(L)aura ",
         "(B)ekah ",
         "(S)teph ",
+        "(R)elila",
         "Sara(h) ",
         "(T)im ",
         "(C)reighton ",
         "(J)eff ",
         "(G)raeme ",
-        "(1) Dennis Laura ",
-        "(2) Dennis Bekah ",
-        "(3) Dennis Steph ",
-        "(4)    "
-    ]
+        "(1) Dennis ",
+        "(2) Laura ",
+        "(3) Bekah ",
+        "(4) Dennis Bekah ",
+        "(5) Dennis Laura "
+    ],
+    "special_cases": {
+         "Dennis/Dad/Pappy": "Dennis",
+         "Tim McCausland": "Tim",
+         "Jeff Hegel": "Jeff"
+     }
 }

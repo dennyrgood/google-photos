@@ -34,6 +34,9 @@ def main():
     # Setup shutdown
     root.protocol('WM_DELETE_WINDOW', app.shutdown)
     
+    # Auto-launch browser at startup
+    root.after(500, lambda: app.launch_with_mode('default'))
+    
     # Run
     root.mainloop()
 
