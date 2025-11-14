@@ -1,0 +1,5 @@
+    1111 ../Inject_V2/browser_controller.py
+      45 ../Inject_V2/inject.py
+     151 ../Inject_V2/keystroke_handler.py
+     294 ../Inject_V2/ui_components.py
+    1601 total
