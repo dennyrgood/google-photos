@@ -23,6 +23,9 @@ class KeystrokeHandler:
         
         # Delete all shortcut
         self.shortcuts['='] = ('delete_all', None)
+
+        # Cursor to end DHM
+        self.shortcuts['-'] = ('cursor_to_end', None)   # DHM
         
         # Tab to add "Dennis " and go next
         self.shortcuts['Tab'] = ('tab_dennis', None)

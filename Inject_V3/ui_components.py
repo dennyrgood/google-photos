@@ -160,8 +160,8 @@ class AssistantUI:
                 self.do_backspace()
             elif action_type == 'delete_all':
                 self.delete_all_description()
-            elif action_type == 'delete_50':
-                self.delete_50_chars()
+            elif action_type == 'cursor_to_end':
+                self.position_cursor_at_end()
             elif action_type == 'tab_dennis':
                 self.add_name('Dennis ')
                 self.next_photo()
@@ -252,10 +252,6 @@ class AssistantUI:
     def delete_all_description(self):
         """Delete entire description."""
         threading.Thread(target=self.browser.delete_all_description, daemon=True).start()
-
-    def delete_50_chars(self):
-        """Delete last 50 characters from description."""
-        threading.Thread(target=self.browser.delete_50_chars, daemon=True).start()
 
     def dump_html(self):
         """Dump current page HTML for debugging."""
