@@ -1,0 +1,115 @@
+170d169
+< 
+172,232c171,220
+<       """Position cursor at END of description textarea."""
+<       try:
+<           print('[CURSOR] Positioning cursor at END...')
+<           
+<           js_find = """() => {
+<       const textareas = document.querySelectorAll('textarea[aria-label="Description"]');
+<       let candidates = [];
+<       const centerX = window.innerWidth / 2;
+<       const centerY = window.innerHeight / 2;
+<       
+<       for (const ta of textareas) {
+<           try {
+<               const rect = ta.getBoundingClientRect();
+<               const isVisible = rect.width > 0 && rect.height > 0;
+<               if (!isVisible) continue;
+<               
+<               const value = (ta.value || '').trim();
+<               const taCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+<               const distance = Math.sqrt(Math.pow(taCenter.x - centerX, 2) + Math.pow(taCenter.y - centerY, 2));
+<               const style = window.getComputedStyle(ta);
+<               const zIndex = parseInt(style.zIndex) || 0;
+<               
+<               candidates.push({ element: ta, value: value, rect: rect, distance: distance, zIndex: zIndex, 
+<   hasContent: value.length > 0 });
+<           } catch (e) {}
+<       }
+<       
+<       if (candidates.length === 0) return null;
+<       
+<       candidates.sort((a, b) => {
+<           if (a.hasContent !== b.hasContent) return b.hasContent ? 1 : -1;
+<           if (Math.abs(a.distance - b.distance) > 50) return a.distance - b.distance;
+<           return b.zIndex - a.zIndex;
+<       });
+<       
+<       const target = candidates[0];
+<       return {
+<           x: target.rect.left + target.rect.width / 2,
+<           y: target.rect.top + target.rect.height / 2,
+<           textLength: target.value.length,
+<           value: target.value
+<       };
+<   }"""
+<           
+<           result = self.page.evaluate(js_find)
+<           if not result:
+<               print('[CURSOR] No textarea found')
+<               return
+<               
+<           # Actually click and position the cursor
+<           self.page.mouse.click(result['x'], result['y'])
+<           self.page.wait_for_timeout(15)
+<           self.page.keyboard.press('End')
+<           self.page.wait_for_timeout(5)
+<           
+<           print(f'[CURSOR] Positioned cursor at END (text length: {result["textLength"]})')
+<               
+<       except Exception as e:
+<           print(f'[CURSOR] ERROR: {e}')
+<           import traceback
+<           traceback.print_exc()
+---
+>         """Position cursor at END of description textarea."""
+>         try:
+>             print('[CURSOR] Positioning cursor at END...')
+>             
+>             js_focus_and_end = """() => {
+>     const textareas = document.querySelectorAll('textarea[aria-label="Description"]');
+>     let candidates = [];
+>     const centerX = window.innerWidth / 2;
+>     const centerY = window.innerHeight / 2;
+>     
+>     for (const ta of textareas) {
+>         try {
+>             const rect = ta.getBoundingClientRect();
+>             const isVisible = rect.width > 0 && rect.height > 0;
+>             if (!isVisible) continue;
+>             
+>             const value = (ta.value || '').trim();
+>             const taCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+>             const distance = Math.sqrt(Math.pow(taCenter.x - centerX, 2) + Math.pow(taCenter.y - centerY, 2));
+>             const style = window.getComputedStyle(ta);
+>             const zIndex = parseInt(style.zIndex) || 0;
+>             
+>             candidates.push({ element: ta, value: value, rect: rect, distance: distance, zIndex: zIndex, hasContent: value.length > 0 });
+>         } catch (e) {}
+>     }
+>     
+>     if (candidates.length === 0) return null;
+>     
+>     candidates.sort((a, b) => {
+>         if (a.hasContent !== b.hasContent) return b.hasContent ? 1 : -1;
+>         if (Math.abs(a.distance - b.distance) > 50) return a.distance - b.distance;
+>         return b.zIndex - a.zIndex;
+>     });
+>     
+>     const target = candidates[0];
+>     target.element.focus();
+>     target.element.selectionStart = target.element.value.length;
+>     target.element.selectionEnd = target.element.value.length;
+>     
+>     return { x: target.rect.left + target.rect.width/2, y: target.rect.top + target.rect.height/2, textLength: target.element.value.length };
+> }"""
+>             
+>             result = self.page.evaluate(js_focus_and_end)
+>             if result:
+>                 print(f'[CURSOR] Cursor positioned at END (text length: {result["textLength"]})')
+>             else:
+>                 print('[CURSOR] No textarea found')
+>                 
+>         except Exception as e:
+>             print(f'[CURSOR] ERROR: {e}')

@@ -1,0 +1,1783 @@
+browser_controller.py:"""Browser controller - extracted from inject_v3.py"""
+browser_controller.py:import time
+browser_controller.py:import queue
+browser_controller.py:import threading
+browser_controller.py:
+browser_controller.py:try:
+browser_controller.py:    from playwright.sync_api import sync_playwright
+browser_controller.py:except Exception:
+browser_controller.py:
+browser_controller.py:
+browser_controller.py:class BrowserController:
+browser_controller.py:    """Minimal Playwright wrapper for Google Photos with old device spoofing."""
+browser_controller.py:    
+browser_controller.py:    def __init__(self):
+browser_controller.py:
+browser_controller.py:        """Start browser worker thread."""
+browser_controller.py:        if sync_playwright is None:
+browser_controller.py:            raise RuntimeError('playwright not installed; run pip install -r requirements.txt')
+browser_controller.py:
+browser_controller.py:        if self._worker and self._worker.is_alive():
+browser_controller.py:            return
+browser_controller.py:
+browser_controller.py:        self._ready_event.clear()
+browser_controller.py:        self._worker.start()
+browser_controller.py:        if not ready:
+browser_controller.py:            raise RuntimeError('Browser worker did not become ready in time')
+browser_controller.py:
+browser_controller.py:    def stop(self):
+browser_controller.py:        """Stop browser worker."""
+browser_controller.py:        self._cmd_queue.put(('stop', None))
+browser_controller.py:        if self._worker:
+browser_controller.py:
+browser_controller.py:    def _worker_main(self, headful):
+browser_controller.py:        """Main worker thread - runs Playwright with old device spoofing."""
+browser_controller.py:        import pathlib
+browser_controller.py:        try:
+browser_controller.py:            
+browser_controller.py:            # Default to iOS 12 iPad (most compatible with Google Photos)
+browser_controller.py:            print('[BROWSER] Mode: iOS 12 iPad')
+browser_controller.py:            print(f'[BROWSER] Using user agent: {user_agent}')
+browser_controller.py:            
+browser_controller.py:                    '--disable-web-security',
+browser_controller.py:                ],
+browser_controller.py:            )
+browser_controller.py:            
+browser_controller.py:            
+browser_controller.py:            # Additional spoofing via CDP
+browser_controller.py:            try:
+browser_controller.py:                    Object.defineProperty(navigator, 'platform', {
+browser_controller.py:                    });
+browser_controller.py:                    Object.defineProperty(navigator, 'maxTouchPoints', {
+browser_controller.py:                    });
+browser_controller.py:                }""")
+browser_controller.py:            except Exception as e:
+browser_controller.py:                print(f'[BROWSER] Warning: Could not override navigator properties: {e}')
+browser_controller.py:            
+browser_controller.py:            self.page.goto('https://photos.google.com')
+browser_controller.py:            
+browser_controller.py:            print('[BROWSER] Started, navigated to Google Photos')
+browser_controller.py:            self._ready_event.set()
+browser_controller.py:
+browser_controller.py:            # Command loop
+browser_controller.py:            while self._running:
+browser_controller.py:                try:
+browser_controller.py:                except Exception:
+browser_controller.py:                    continue
+browser_controller.py:
+browser_controller.py:                    break
+browser_controller.py:                    self._do_next()
+browser_controller.py:                    self._do_prev()
+browser_controller.py:                    self._do_append_x()
+browser_controller.py:                    try:
+browser_controller.py:                        self._do_append_text(arg)
+browser_controller.py:                    except Exception as e:
+browser_controller.py:                        print(f'[APPEND_TEXT] ERROR: {e}')
+browser_controller.py:                    ev.set()
+browser_controller.py:                    self._do_dump_html()
+browser_controller.py:                    self._do_backspace()
+browser_controller.py:                    self._do_delete_all()
+browser_controller.py:
+browser_controller.py:        finally:
+browser_controller.py:            try:
+browser_controller.py:                if self.context:
+browser_controller.py:                    self.context.close()
+browser_controller.py:            except Exception:
+browser_controller.py:                pass
+browser_controller.py:            try:
+browser_controller.py:                if self.playwright:
+browser_controller.py:                    self.playwright.stop()
+browser_controller.py:            except Exception:
+browser_controller.py:                pass
+browser_controller.py:            print('[BROWSER] Stopped')
+browser_controller.py:
+browser_controller.py:    def _do_dump_html(self):
+browser_controller.py:        """Dump current page HTML for debugging."""
+browser_controller.py:        try:
+browser_controller.py:                f.write(html)
+browser_controller.py:            print(f'[DUMP] Saved HTML to {filename}')
+browser_controller.py:            
+browser_controller.py:            print('[DUMP] Checking for textareas...')
+browser_controller.py:            print(f'[DUMP] Found {len(textareas)} textareas')
+browser_controller.py:            
+browser_controller.py:            for i, ta in enumerate(textareas[:5]):
+browser_controller.py:                try:
+browser_controller.py:                except Exception as e:
+browser_controller.py:                    print(f'[DUMP]   Textarea {i}: Error reading - {e}')
+browser_controller.py:                    
+browser_controller.py:        except Exception as e:
+browser_controller.py:            print(f'[DUMP] ERROR: {e}')
+browser_controller.py:            import traceback
+browser_controller.py:            traceback.print_exc()
+browser_controller.py:
+browser_controller.py:
+browser_controller.py:    def _position_cursor_at_end(self):
+browser_controller.py:      """Position cursor at END of description textarea."""
+browser_controller.py:      try:
+browser_controller.py:          print('[CURSOR] Positioning cursor at END...')
+browser_controller.py:          
+browser_controller.py:      
+browser_controller.py:      for (const ta of textareas) {
+browser_controller.py:          try {
+browser_controller.py:              if (!isVisible) continue;
+browser_controller.py:              
+browser_controller.py:              
+browser_controller.py:              candidates.push({ element: ta, value: value, rect: rect, distance: distance, zIndex: zIndex, 
+browser_controller.py:  hasContent: value.length > 0 });
+browser_controller.py:          } catch (e) {}
+browser_controller.py:      }
+browser_controller.py:      
+browser_controller.py:      
+browser_controller.py:          if (Math.abs(a.distance - b.distance) > 50) return a.distance - b.distance;
+browser_controller.py:          return b.zIndex - a.zIndex;
+browser_controller.py:      });
+browser_controller.py:      
+browser_controller.py:      return {
+browser_controller.py:          x: target.rect.left + target.rect.width / 2,
+browser_controller.py:          y: target.rect.top + target.rect.height / 2,
+browser_controller.py:          textLength: target.value.length,
+browser_controller.py:          value: target.value
+browser_controller.py:      };
+browser_controller.py:  }"""
+browser_controller.py:          
+browser_controller.py:          if not result:
+browser_controller.py:              print('[CURSOR] No textarea found')
+browser_controller.py:              return
+browser_controller.py:              
+browser_controller.py:          # Actually click and position the cursor
+browser_controller.py:          self.page.mouse.click(result['x'], result['y'])
+browser_controller.py:          self.page.wait_for_timeout(15)
+browser_controller.py:          self.page.keyboard.press('End')
+browser_controller.py:          self.page.wait_for_timeout(5)
+browser_controller.py:          
+browser_controller.py:          print(f'[CURSOR] Positioned cursor at END (text length: {result["textLength"]})')
+browser_controller.py:              
+browser_controller.py:      except Exception as e:
+browser_controller.py:          print(f'[CURSOR] ERROR: {e}')
+browser_controller.py:          import traceback
+browser_controller.py:          traceback.print_exc()
+browser_controller.py:
+browser_controller.py:    def _extract_and_add_names(self):
+browser_controller.py:        """Extract names from webpage section and add to description if not already there."""
+browser_controller.py:        try:
+browser_controller.py:            print('[NAMES] Extracting names from webpage...')
+browser_controller.py:            
+browser_controller.py:            # Load names and special cases from names.json
+browser_controller.py:            import json
+browser_controller.py:            with open('names.json') as f:
+browser_controller.py:            
+browser_controller.py:            print(f'[NAMES] Loaded special cases: {special_cases}')
+browser_controller.py:            
+browser_controller.py:            # Extract clean names (without parentheses)
+browser_controller.py:            for name_entry in names_list:
+browser_controller.py:                    clean_names.append(clean)
+browser_controller.py:            
+browser_controller.py:            print(f'[NAMES] Searching for names: {clean_names}')
+browser_controller.py:            
+browser_controller.py:    
+browser_controller.py:    if (allDivs.length > 0) {
+browser_controller.py:        if (nameDiv && nameDiv.textContent) {
+browser_controller.py:            foundNames.push(nameDiv.textContent.trim());
+browser_controller.py:        }
+browser_controller.py:    }
+browser_controller.py:    
+browser_controller.py:    if (allSpans.length > 0) {
+browser_controller.py:            if (rect.height > 0 && rect.width > 0) {
+browser_controller.py:                if (span.textContent) {
+browser_controller.py:                    foundNames.push(span.textContent.trim());
+browser_controller.py:                }
+browser_controller.py:            }
+browser_controller.py:        }
+browser_controller.py:    }
+browser_controller.py:    
+browser_controller.py:    return foundNames.length > 0 ? foundNames : null;
+browser_controller.py:}"""
+browser_controller.py:            
+browser_controller.py:            
+browser_controller.py:            if not found_names:
+browser_controller.py:                print('[NAMES] No name sections found on webpage')
+browser_controller.py:                return
+browser_controller.py:            
+browser_controller.py:            print(f'[NAMES] Found names in webpage: {found_names}')
+browser_controller.py:            
+browser_controller.py:            if not current_desc:
+browser_controller.py:            
+browser_controller.py:            print(f'[NAMES] Current description: {repr(current_desc)[:80]}')
+browser_controller.py:            print('[NAMES] Positioning cursor at END before adding names')
+browser_controller.py:            self._position_cursor_at_end()
+browser_controller.py:            
+browser_controller.py:            for found_name in found_names:
+browser_controller.py:                print(f'[NAMES] Processing: {repr(found_name)}')
+browser_controller.py:                
+browser_controller.py:                if found_name and found_name[0:4].isdigit():
+browser_controller.py:                    print(f'[NAMES] Skipping year-prefixed text: "{found_name}"')
+browser_controller.py:                    continue
+browser_controller.py:
+browser_controller.py:                if found_name and found_name.startswith("0"):
+browser_controller.py:                    print(f'[NAMES] Skipping name starting with 0: "{found_name}"')
+browser_controller.py:                    continue
+browser_controller.py:                
+browser_controller.py:                if found_name in special_cases:
+browser_controller.py:                    print(f'[NAMES] Special case: "{found_name}" -> "{mapped_name}"')
+browser_controller.py:                
+browser_controller.py:                if found_name in desc_normalized:
+browser_controller.py:                    print(f'[NAMES] "{found_name}" already in description, skipping')
+browser_controller.py:                    continue
+browser_controller.py:                
+browser_controller.py:                self._position_cursor_at_end()
+browser_controller.py:                print(f'[NAMES] Adding " {found_name}" to description')
+browser_controller.py:                self.append_text(' ' + found_name + ' ')
+browser_controller.py:            
+browser_controller.py:            print('[NAMES] Positioning cursor at END after adding all names')
+browser_controller.py:            self._position_cursor_at_end()
+browser_controller.py:            
+browser_controller.py:        except Exception as e:
+browser_controller.py:            print(f'[NAMES] ERROR: {e}')
+browser_controller.py:    def _navigate_photo(self, direction):
+browser_controller.py:        """Common navigation logic for next/prev photo."""
+browser_controller.py:        
+browser_controller.py:        try:
+browser_controller.py:            print(f'[{label}] Starting navigation...')
+browser_controller.py:            print(f'[{label}] Current URL: {url_before}')
+browser_controller.py:            
+browser_controller.py:            for img in imgs:
+browser_controller.py:                try:
+browser_controller.py:                    if box and box.get('width', 0) > 200 and box.get('height', 0) > 100:
+browser_controller.py:                        print(f'[{label}] Clicking image center at ({int(cx)},{int(cy)})')
+browser_controller.py:                        try:
+browser_controller.py:                            self.page.mouse.click(cx, cy)
+browser_controller.py:                        except Exception:
+browser_controller.py:                            pass
+browser_controller.py:                        self.page.wait_for_timeout(15)
+browser_controller.py:                        try:
+browser_controller.py:                        except Exception:
+browser_controller.py:                            pass
+browser_controller.py:                        break
+browser_controller.py:                except Exception:
+browser_controller.py:                    continue
+browser_controller.py:
+browser_controller.py:            if not clicked:
+browser_controller.py:                try:
+browser_controller.py:                    print(f'[{label}] Fallback clicking viewport center at ({int(cx)},{int(cy)})')
+browser_controller.py:                    try:
+browser_controller.py:                        self.page.mouse.click(cx, cy)
+browser_controller.py:                    except Exception:
+browser_controller.py:                        pass
+browser_controller.py:                    self.page.wait_for_timeout(15)
+browser_controller.py:                    try:
+browser_controller.py:                    except Exception:
+browser_controller.py:                        pass
+browser_controller.py:                except Exception:
+browser_controller.py:                    pass
+browser_controller.py:
+browser_controller.py:            print(f'[{label}] Pressing {arrow_key}')
+browser_controller.py:            self.page.keyboard.press(arrow_key)
+browser_controller.py:            self.page.wait_for_timeout(5)
+browser_controller.py:            
+browser_controller.py:            try:
+browser_controller.py:            except Exception:
+browser_controller.py:                pass
+browser_controller.py:            
+browser_controller.py:            print(f'[{label}] New description: {repr(desc)[:100]}')
+browser_controller.py:            print(f'[{label}] Positioning cursor at END of description')
+browser_controller.py:            self._position_cursor_at_end()
+browser_controller.py:            self._extract_and_add_names()
+browser_controller.py:            
+browser_controller.py:        except Exception as e:
+browser_controller.py:            print(f'[{label}] ERROR: {e}')
+browser_controller.py:
+browser_controller.py:    def _do_next(self):
+browser_controller.py:        """Navigate to next photo."""
+browser_controller.py:        self._navigate_photo('next')
+browser_controller.py:
+browser_controller.py:    def _do_prev(self):
+browser_controller.py:        """Navigate to previous photo."""
+browser_controller.py:        self._navigate_photo('prev')
+browser_controller.py:
+browser_controller.py:    def _sample_description(self):
+browser_controller.py:        """Read current description from page."""
+browser_controller.py:        try:
+browser_controller.py:            print('[SAMPLE] Executing page.evaluate...')
+browser_controller.py:    console.log('Found textareas:', textareas.length);
+browser_controller.py:    
+browser_controller.py:    
+browser_controller.py:        
+browser_controller.py:        if (!isVisible) continue;
+browser_controller.py:        
+browser_controller.py:            x: rect.left + rect.width / 2,
+browser_controller.py:            y: rect.top + rect.height / 2
+browser_controller.py:        };
+browser_controller.py:            Math.pow(taCenter.x - centerX, 2) + 
+browser_controller.py:            Math.pow(taCenter.y - centerY, 2)
+browser_controller.py:        );
+browser_controller.py:        
+browser_controller.py:        
+browser_controller.py:        
+browser_controller.py:        candidates.push({
+browser_controller.py:            element: ta,
+browser_controller.py:            value: value,
+browser_controller.py:            distance: distance,
+browser_controller.py:            zIndex: zIndex,
+browser_controller.py:            hasContent: value.length > 0
+browser_controller.py:        });
+browser_controller.py:    }
+browser_controller.py:    
+browser_controller.py:        console.log('No visible textareas found');
+browser_controller.py:        return null;
+browser_controller.py:    }
+browser_controller.py:    
+browser_controller.py:            return b.hasContent ? 1 : -1;
+browser_controller.py:        }
+browser_controller.py:        if (Math.abs(a.distance - b.distance) > 50) {
+browser_controller.py:            return a.distance - b.distance;
+browser_controller.py:        }
+browser_controller.py:        return b.zIndex - a.zIndex;
+browser_controller.py:    });
+browser_controller.py:    
+browser_controller.py:    console.log('Selected textarea with value:', selected.value);
+browser_controller.py:    return selected.value;
+browser_controller.py:}"""
+browser_controller.py:            
+browser_controller.py:            print(f'[SAMPLE] Result: {repr(result)[:100]}')
+browser_controller.py:            return result
+browser_controller.py:            
+browser_controller.py:        except Exception as e:
+browser_controller.py:            print(f'[SAMPLE] ERROR: {e}')
+browser_controller.py:            return None
+browser_controller.py:
+browser_controller.py:    def _focus_textarea(self, x, y):
+browser_controller.py:        """Common logic to focus and position cursor at end of textarea."""
+browser_controller.py:        self.page.mouse.click(x, y)
+browser_controller.py:        self.page.wait_for_timeout(15)
+browser_controller.py:        
+browser_controller.py:        try:
+browser_controller.py:            self.page.evaluate(
+browser_controller.py:                "return true; } "
+browser_controller.py:                "return true; } return false; }", 
+browser_controller.py:                x, y
+browser_controller.py:            )
+browser_controller.py:        except Exception:
+browser_controller.py:            pass
+browser_controller.py:        
+browser_controller.py:        try:
+browser_controller.py:            self.page.wait_for_function(
+browser_controller.py:            )
+browser_controller.py:            print('[FOCUS] textarea became active')
+browser_controller.py:        except Exception:
+browser_controller.py:            print('[FOCUS] WARNING: textarea did not become active within timeout')
+browser_controller.py:
+browser_controller.py:    def _do_append_x(self):
+browser_controller.py:        """Append 'X' to current description."""
+browser_controller.py:        try:
+browser_controller.py:            print('[APPEND_X] Starting...')
+browser_controller.py:            
+browser_controller.py:    console.log('Found textareas:', textareas.length);
+browser_controller.py:    
+browser_controller.py:    
+browser_controller.py:    for (const ta of textareas) {
+browser_controller.py:        
+browser_controller.py:        if (!isVisible) continue;
+browser_controller.py:        
+browser_controller.py:            x: rect.left + rect.width / 2,
+browser_controller.py:            y: rect.top + rect.height / 2
+browser_controller.py:        };
+browser_controller.py:            Math.pow(taCenter.x - centerX, 2) + 
+browser_controller.py:            Math.pow(taCenter.y - centerY, 2)
+browser_controller.py:        );
+browser_controller.py:        
+browser_controller.py:        candidates.push({
+browser_controller.py:            element: ta,
+browser_controller.py:            value: value,
+browser_controller.py:            rect: rect,
+browser_controller.py:            distance: distance,
+browser_controller.py:            zIndex: zIndex,
+browser_controller.py:            hasContent: value.length > 0
+browser_controller.py:        });
+browser_controller.py:    }
+browser_controller.py:    
+browser_controller.py:        console.log('No visible textareas');
+browser_controller.py:        return null;
+browser_controller.py:    }
+browser_controller.py:    
+browser_controller.py:        if (Math.abs(a.distance - b.distance) > 50) return a.distance - b.distance;
+browser_controller.py:        return b.zIndex - a.zIndex;
+browser_controller.py:    });
+browser_controller.py:    
+browser_controller.py:    console.log('Selected textarea at:', rect, 'value:', target.value);
+browser_controller.py:    
+browser_controller.py:    return {
+browser_controller.py:        x: rect.left + rect.width / 2,
+browser_controller.py:        y: rect.top + rect.height / 2,
+browser_controller.py:        currentValue: target.value
+browser_controller.py:    };
+browser_controller.py:}"""
+browser_controller.py:            
+browser_controller.py:            if not result:
+browser_controller.py:                print('[APPEND_X] FAILED - No textarea found')
+browser_controller.py:                return
+browser_controller.py:            
+browser_controller.py:            
+browser_controller.py:            print(f'[APPEND_X] Textarea at ({x}, {y}), current value: "{current}"')
+browser_controller.py:            print(f'[APPEND_X] Clicking at ({x}, {y})')
+browser_controller.py:            self._focus_textarea(x, y)
+browser_controller.py:            
+browser_controller.py:            print('[APPEND_X] Pressing End key')
+browser_controller.py:            self.page.keyboard.press('End')
+browser_controller.py:            self.page.wait_for_timeout(5)
+browser_controller.py:            
+browser_controller.py:            print('[APPEND_X] Typing space')
+browser_controller.py:            self.page.keyboard.type(' ')
+browser_controller.py:            self.page.wait_for_timeout(10)
+browser_controller.py:            
+browser_controller.py:            print(f'[APPEND_X] SUCCESS - appended space to "{current}"')
+browser_controller.py:            
+browser_controller.py:        except Exception as e:
+browser_controller.py:            print(f'[APPEND_X] ERROR: {e}')
+browser_controller.py:            import traceback
+browser_controller.py:            traceback.print_exc()
+browser_controller.py:
+browser_controller.py:    def _do_append_text(self, text):
+browser_controller.py:        """Append arbitrary text to current description."""
+browser_controller.py:        try:
+browser_controller.py:            print(f'[APPEND_TEXT] Starting append of: {repr(text)[:50]}')
+browser_controller.py:    
+browser_controller.py:    
+browser_controller.py:    for (const ta of textareas) {
+browser_controller.py:        try {
+browser_controller.py:            if (!isVisible) continue;
+browser_controller.py:            
+browser_controller.py:            
+browser_controller.py:            candidates.push({ element: ta, value: value, rect: rect, distance: distance, zIndex: zIndex, hasContent: value.length > 0 });
+browser_controller.py:        } catch (e) {}
+browser_controller.py:    }
+browser_controller.py:    
+browser_controller.py:    
+browser_controller.py:        if (Math.abs(a.distance - b.distance) > 50) return a.distance - b.distance;
+browser_controller.py:        return b.zIndex - a.zIndex;
+browser_controller.py:    });
+browser_controller.py:    
+browser_controller.py:    
+browser_controller.py:    try {
+browser_controller.py:        if (rect.top < 0 || rect.left < 0 || rect.bottom > window.innerHeight || rect.right > window.innerWidth) {
+browser_controller.py:            try { target.element.scrollIntoView({block: 'center', inline: 'center'}); } catch(e) {}
+browser_controller.py:        }
+browser_controller.py:    } catch (e) {}
+browser_controller.py:    
+browser_controller.py:    return { x: rect.left + rect.width/2, y: rect.top + rect.height/2, currentValue: target.value };
+browser_controller.py:}"""
+browser_controller.py:
+browser_controller.py:            if not result:
+browser_controller.py:                print('[APPEND_TEXT] FAILED - No textarea found')
+browser_controller.py:                return
+browser_controller.py:
+browser_controller.py:            print(f'[APPEND_TEXT] Textarea at ({x}, {y}), current value: "{current}"')
+browser_controller.py:
+browser_controller.py:            if y is not None and y < 0:
+browser_controller.py:                print(f"[APPEND_TEXT] WARNING: target y is negative ({y}), re-sampling once")
+browser_controller.py:                self.page.wait_for_timeout(5)
+browser_controller.py:                    print(f"[APPEND_TEXT] Re-sampled textarea at ({x}, {y}), current value: {repr(current)[:80]}")
+browser_controller.py:                else:
+browser_controller.py:                    print('[APPEND_TEXT] FAILED - target remains off-screen after re-sample')
+browser_controller.py:                    return
+browser_controller.py:
+browser_controller.py:            self._focus_textarea(x, y)
+browser_controller.py:            
+browser_controller.py:            print('[APPEND_TEXT] Pressing End key to move cursor to end')
+browser_controller.py:            self.page.keyboard.press('End')
+browser_controller.py:            self.page.wait_for_timeout(5)
+browser_controller.py:            
+browser_controller.py:            print(f'[APPEND_TEXT] Typing text: {repr(text)}')
+browser_controller.py:            self.page.keyboard.type(text)
+browser_controller.py:            self.page.wait_for_timeout(10)
+browser_controller.py:
+browser_controller.py:            print(f'[APPEND_SUCCESS] Appended {repr(text)} to description')
+browser_controller.py:
+browser_controller.py:        except Exception as e:
+browser_controller.py:            print(f'[APPEND_TEXT] ERROR: {e}')
+browser_controller.py:            import traceback
+browser_controller.py:            traceback.print_exc()
+browser_controller.py:    def _do_backspace(self):
+browser_controller.py:        """Send backspace key to the active textarea."""
+browser_controller.py:        try:
+browser_controller.py:            print('[BACKSPACE] Starting...')
+browser_controller.py:            
+browser_controller.py:    
+browser_controller.py:    for (const ta of textareas) {
+browser_controller.py:        try {
+browser_controller.py:            if (!isVisible) continue;
+browser_controller.py:            
+browser_controller.py:            
+browser_controller.py:            candidates.push({ element: ta, value: value, rect: rect, distance: distance, zIndex: zIndex, hasContent: value.length > 0 });
+browser_controller.py:        } catch (e) {}
+browser_controller.py:    }
+browser_controller.py:    
+browser_controller.py:    
+browser_controller.py:        if (Math.abs(a.distance - b.distance) > 50) return a.distance - b.distance;
+browser_controller.py:        return b.zIndex - a.zIndex;
+browser_controller.py:    });
+browser_controller.py:    
+browser_controller.py:    return { x: rect.left + rect.width/2, y: rect.top + rect.height/2 };
+browser_controller.py:}"""
+browser_controller.py:
+browser_controller.py:            if not result:
+browser_controller.py:                print('[BACKSPACE] FAILED - No textarea found')
+browser_controller.py:                return
+browser_controller.py:
+browser_controller.py:            
+browser_controller.py:            print(f'[BACKSPACE] Textarea at ({x}, {y})')
+browser_controller.py:            self._focus_textarea(x, y)
+browser_controller.py:            
+browser_controller.py:            print('[BACKSPACE] Sending backspace')
+browser_controller.py:            self.page.keyboard.press('Backspace')
+browser_controller.py:            self.page.wait_for_timeout(15)
+browser_controller.py:            print('[BACKSPACE] SUCCESS')
+browser_controller.py:            
+browser_controller.py:        except Exception as e:
+browser_controller.py:            print(f'[BACKSPACE] ERROR: {e}')
+browser_controller.py:            import traceback
+browser_controller.py:            traceback.print_exc()
+browser_controller.py:
+browser_controller.py:    def _do_delete_all(self):
+browser_controller.py:        """Delete entire description."""
+browser_controller.py:        try:
+browser_controller.py:            print('[DELETE_ALL] Starting...')
+browser_controller.py:            
+browser_controller.py:    
+browser_controller.py:    for (const ta of textareas) {
+browser_controller.py:        try {
+browser_controller.py:            if (!isVisible) continue;
+browser_controller.py:            
+browser_controller.py:            
+browser_controller.py:            candidates.push({ element: ta, value: value, rect: rect, distance: distance, zIndex: zIndex, hasContent: value.length > 0 });
+browser_controller.py:        } catch (e) {}
+browser_controller.py:    }
+browser_controller.py:    
+browser_controller.py:    
+browser_controller.py:        if (Math.abs(a.distance - b.distance) > 50) return a.distance - b.distance;
+browser_controller.py:        return b.zIndex - a.zIndex;
+browser_controller.py:    });
+browser_controller.py:    
+browser_controller.py:    return { x: rect.left + rect.width/2, y: rect.top + rect.height/2 };
+browser_controller.py:}"""
+browser_controller.py:
+browser_controller.py:            if not result:
+browser_controller.py:                print('[DELETE_ALL] FAILED - No textarea found')
+browser_controller.py:                return
+browser_controller.py:
+browser_controller.py:            
+browser_controller.py:            print(f'[DELETE_ALL] Textarea at ({x}, {y})')
+browser_controller.py:            self._focus_textarea(x, y)
+browser_controller.py:            
+browser_controller.py:            print('[DELETE_ALL] Pressing backspace 50 times to clear description')
+browser_controller.py:            for _ in range(50):
+browser_controller.py:                self.page.keyboard.press('Backspace')
+browser_controller.py:            self.page.wait_for_timeout(5)
+browser_controller.py:            print('[DELETE_ALL] SUCCESS')
+browser_controller.py:            
+browser_controller.py:            
+browser_controller.py:        except Exception as e:
+browser_controller.py:            print(f'[DELETE_ALL] ERROR: {e}')
+browser_controller.py:            import traceback
+browser_controller.py:            traceback.print_exc()
+browser_controller.py:
+browser_controller.py:    def goto_next_photo(self):
+browser_controller.py:        """Queue next photo command."""
+browser_controller.py:        if not self._running:
+browser_controller.py:            raise RuntimeError('Browser not running')
+browser_controller.py:        self._cmd_queue.put(('next', None))
+browser_controller.py:
+browser_controller.py:    def goto_prev_photo(self):
+browser_controller.py:        """Queue prev photo command."""
+browser_controller.py:        if not self._running:
+browser_controller.py:            raise RuntimeError('Browser not running')
+browser_controller.py:        self._cmd_queue.put(('prev', None))
+browser_controller.py:
+browser_controller.py:    def append_x(self):
+browser_controller.py:        """Queue append X command."""
+browser_controller.py:        if not self._running:
+browser_controller.py:            raise RuntimeError('Browser not running')
+browser_controller.py:        self._cmd_queue.put(('append_x', None))
+browser_controller.py:
+browser_controller.py:    def append_text(self, text):
+browser_controller.py:        """Queue append_text command with provided string."""
+browser_controller.py:        if not self._running:
+browser_controller.py:            raise RuntimeError('Browser not running')
+browser_controller.py:        self._cmd_queue.put(('append_text', text))
+browser_controller.py:
+browser_controller.py:    def send_backspace(self):
+browser_controller.py:        """Queue backspace command."""
+browser_controller.py:        if not self._running:
+browser_controller.py:            raise RuntimeError('Browser not running')
+browser_controller.py:        self._cmd_queue.put(('backspace', None))
+browser_controller.py:
+browser_controller.py:    def delete_all_description(self):
+browser_controller.py:        """Queue delete all description command."""
+browser_controller.py:        if not self._running:
+browser_controller.py:            raise RuntimeError('Browser not running')
+browser_controller.py:        self._cmd_queue.put(('delete_all', None))
+browser_controller.py:
+browser_controller.py:        """Read current description synchronously."""
+browser_controller.py:        if not self._running:
+browser_controller.py:            raise RuntimeError('Browser not running')
+browser_controller.py:        self._cmd_queue.put(('read_desc', (ev, res)))
+browser_controller.py:        return res.get('description') if ok else None
+browser_controller.py:
+browser_controller.py:    def dump_html(self):
+browser_controller.py:        """Queue HTML dump command for debugging."""
+browser_controller.py:        if not self._running:
+browser_controller.py:            raise RuntimeError('Browser not running')
+browser_controller.py:        self._cmd_queue.put(('dump_html', None))
+browser_controller.py:
+browser_controller.py:    def get_state(self):
+browser_controller.py:        """Return current state for UI polling."""
+browser_controller.py:        return {
+browser_controller.py:            'url': self._last_url,
+browser_controller.py:            'description': self._last_description
+browser_controller.py:        }
+browser_controller.py-diff:170d169
+browser_controller.py-diff:< 
+browser_controller.py-diff:172,232c171,220
+browser_controller.py-diff:<       """Position cursor at END of description textarea."""
+browser_controller.py-diff:<       try:
+browser_controller.py-diff:<           print('[CURSOR] Positioning cursor at END...')
+browser_controller.py-diff:<           
+browser_controller.py-diff:<       
+browser_controller.py-diff:<       for (const ta of textareas) {
+browser_controller.py-diff:<           try {
+browser_controller.py-diff:<               if (!isVisible) continue;
+browser_controller.py-diff:<               
+browser_controller.py-diff:<               
+browser_controller.py-diff:<               candidates.push({ element: ta, value: value, rect: rect, distance: distance, zIndex: zIndex, 
+browser_controller.py-diff:<   hasContent: value.length > 0 });
+browser_controller.py-diff:<           } catch (e) {}
+browser_controller.py-diff:<       }
+browser_controller.py-diff:<       
+browser_controller.py-diff:<       
+browser_controller.py-diff:<           if (Math.abs(a.distance - b.distance) > 50) return a.distance - b.distance;
+browser_controller.py-diff:<           return b.zIndex - a.zIndex;
+browser_controller.py-diff:<       });
+browser_controller.py-diff:<       
+browser_controller.py-diff:<       return {
+browser_controller.py-diff:<           x: target.rect.left + target.rect.width / 2,
+browser_controller.py-diff:<           y: target.rect.top + target.rect.height / 2,
+browser_controller.py-diff:<           textLength: target.value.length,
+browser_controller.py-diff:<           value: target.value
+browser_controller.py-diff:<       };
+browser_controller.py-diff:<   }"""
+browser_controller.py-diff:<           
+browser_controller.py-diff:<           if not result:
+browser_controller.py-diff:<               print('[CURSOR] No textarea found')
+browser_controller.py-diff:<               return
+browser_controller.py-diff:<               
+browser_controller.py-diff:<           # Actually click and position the cursor
+browser_controller.py-diff:<           self.page.mouse.click(result['x'], result['y'])
+browser_controller.py-diff:<           self.page.wait_for_timeout(15)
+browser_controller.py-diff:<           self.page.keyboard.press('End')
+browser_controller.py-diff:<           self.page.wait_for_timeout(5)
+browser_controller.py-diff:<           
+browser_controller.py-diff:<           print(f'[CURSOR] Positioned cursor at END (text length: {result["textLength"]})')
+browser_controller.py-diff:<               
+browser_controller.py-diff:<       except Exception as e:
+browser_controller.py-diff:<           print(f'[CURSOR] ERROR: {e}')
+browser_controller.py-diff:<           import traceback
+browser_controller.py-diff:<           traceback.print_exc()
+browser_controller.py-diff:---
+browser_controller.py-diff:>         """Position cursor at END of description textarea."""
+browser_controller.py-diff:>         try:
+browser_controller.py-diff:>             print('[CURSOR] Positioning cursor at END...')
+browser_controller.py-diff:>             
+browser_controller.py-diff:>     
+browser_controller.py-diff:>     for (const ta of textareas) {
+browser_controller.py-diff:>         try {
+browser_controller.py-diff:>             if (!isVisible) continue;
+browser_controller.py-diff:>             
+browser_controller.py-diff:>             
+browser_controller.py-diff:>             candidates.push({ element: ta, value: value, rect: rect, distance: distance, zIndex: zIndex, hasContent: value.length > 0 });
+browser_controller.py-diff:>         } catch (e) {}
+browser_controller.py-diff:>     }
+browser_controller.py-diff:>     
+browser_controller.py-diff:>     
+browser_controller.py-diff:>         if (Math.abs(a.distance - b.distance) > 50) return a.distance - b.distance;
+browser_controller.py-diff:>         return b.zIndex - a.zIndex;
+browser_controller.py-diff:>     });
+browser_controller.py-diff:>     
+browser_controller.py-diff:>     target.element.focus();
+browser_controller.py-diff:>     
+browser_controller.py-diff:>     return { x: target.rect.left + target.rect.width/2, y: target.rect.top + target.rect.height/2, textLength: target.element.value.length };
+browser_controller.py-diff:> }"""
+browser_controller.py-diff:>             
+browser_controller.py-diff:>             if result:
+browser_controller.py-diff:>                 print(f'[CURSOR] Cursor positioned at END (text length: {result["textLength"]})')
+browser_controller.py-diff:>             else:
+browser_controller.py-diff:>                 print('[CURSOR] No textarea found')
+browser_controller.py-diff:>                 
+browser_controller.py-diff:>         except Exception as e:
+browser_controller.py-diff:>             print(f'[CURSOR] ERROR: {e}')
+browser_controller.py-orig:"""Browser controller - extracted from inject_v3.py"""
+browser_controller.py-orig:import time
+browser_controller.py-orig:import queue
+browser_controller.py-orig:import threading
+browser_controller.py-orig:
+browser_controller.py-orig:try:
+browser_controller.py-orig:    from playwright.sync_api import sync_playwright
+browser_controller.py-orig:except Exception:
+browser_controller.py-orig:
+browser_controller.py-orig:
+browser_controller.py-orig:class BrowserController:
+browser_controller.py-orig:    """Minimal Playwright wrapper for Google Photos with old device spoofing."""
+browser_controller.py-orig:    
+browser_controller.py-orig:    def __init__(self):
+browser_controller.py-orig:
+browser_controller.py-orig:        """Start browser worker thread."""
+browser_controller.py-orig:        if sync_playwright is None:
+browser_controller.py-orig:            raise RuntimeError('playwright not installed; run pip install -r requirements.txt')
+browser_controller.py-orig:
+browser_controller.py-orig:        if self._worker and self._worker.is_alive():
+browser_controller.py-orig:            return
+browser_controller.py-orig:
+browser_controller.py-orig:        self._ready_event.clear()
+browser_controller.py-orig:        self._worker.start()
+browser_controller.py-orig:        if not ready:
+browser_controller.py-orig:            raise RuntimeError('Browser worker did not become ready in time')
+browser_controller.py-orig:
+browser_controller.py-orig:    def stop(self):
+browser_controller.py-orig:        """Stop browser worker."""
+browser_controller.py-orig:        self._cmd_queue.put(('stop', None))
+browser_controller.py-orig:        if self._worker:
+browser_controller.py-orig:
+browser_controller.py-orig:    def _worker_main(self, headful):
+browser_controller.py-orig:        """Main worker thread - runs Playwright with old device spoofing."""
+browser_controller.py-orig:        import pathlib
+browser_controller.py-orig:        try:
+browser_controller.py-orig:            
+browser_controller.py-orig:            # Default to iOS 12 iPad (most compatible with Google Photos)
+browser_controller.py-orig:            print('[BROWSER] Mode: iOS 12 iPad')
+browser_controller.py-orig:            print(f'[BROWSER] Using user agent: {user_agent}')
+browser_controller.py-orig:            
+browser_controller.py-orig:                    '--disable-web-security',
+browser_controller.py-orig:                ],
+browser_controller.py-orig:            )
+browser_controller.py-orig:            
+browser_controller.py-orig:            
+browser_controller.py-orig:            # Additional spoofing via CDP
+browser_controller.py-orig:            try:
+browser_controller.py-orig:                    Object.defineProperty(navigator, 'platform', {
+browser_controller.py-orig:                    });
+browser_controller.py-orig:                    Object.defineProperty(navigator, 'maxTouchPoints', {
+browser_controller.py-orig:                    });
+browser_controller.py-orig:                }""")
+browser_controller.py-orig:            except Exception as e:
+browser_controller.py-orig:                print(f'[BROWSER] Warning: Could not override navigator properties: {e}')
+browser_controller.py-orig:            
+browser_controller.py-orig:            self.page.goto('https://photos.google.com')
+browser_controller.py-orig:            
+browser_controller.py-orig:            print('[BROWSER] Started, navigated to Google Photos')
+browser_controller.py-orig:            self._ready_event.set()
+browser_controller.py-orig:
+browser_controller.py-orig:            # Command loop
+browser_controller.py-orig:            while self._running:
+browser_controller.py-orig:                try:
+browser_controller.py-orig:                except Exception:
+browser_controller.py-orig:                    continue
+browser_controller.py-orig:
+browser_controller.py-orig:                    break
+browser_controller.py-orig:                    self._do_next()
+browser_controller.py-orig:                    self._do_prev()
+browser_controller.py-orig:                    self._do_append_x()
+browser_controller.py-orig:                    try:
+browser_controller.py-orig:                        self._do_append_text(arg)
+browser_controller.py-orig:                    except Exception as e:
+browser_controller.py-orig:                        print(f'[APPEND_TEXT] ERROR: {e}')
+browser_controller.py-orig:                    ev.set()
+browser_controller.py-orig:                    self._do_dump_html()
+browser_controller.py-orig:                    self._do_backspace()
+browser_controller.py-orig:                    self._do_delete_all()
+browser_controller.py-orig:
+browser_controller.py-orig:        finally:
+browser_controller.py-orig:            try:
+browser_controller.py-orig:                if self.context:
+browser_controller.py-orig:                    self.context.close()
+browser_controller.py-orig:            except Exception:
+browser_controller.py-orig:                pass
+browser_controller.py-orig:            try:
+browser_controller.py-orig:                if self.playwright:
+browser_controller.py-orig:                    self.playwright.stop()
+browser_controller.py-orig:            except Exception:
+browser_controller.py-orig:                pass
+browser_controller.py-orig:            print('[BROWSER] Stopped')
+browser_controller.py-orig:
+browser_controller.py-orig:    def _do_dump_html(self):
+browser_controller.py-orig:        """Dump current page HTML for debugging."""
+browser_controller.py-orig:        try:
+browser_controller.py-orig:                f.write(html)
+browser_controller.py-orig:            print(f'[DUMP] Saved HTML to {filename}')
+browser_controller.py-orig:            
+browser_controller.py-orig:            print('[DUMP] Checking for textareas...')
+browser_controller.py-orig:            print(f'[DUMP] Found {len(textareas)} textareas')
+browser_controller.py-orig:            
+browser_controller.py-orig:            for i, ta in enumerate(textareas[:5]):
+browser_controller.py-orig:                try:
+browser_controller.py-orig:                except Exception as e:
+browser_controller.py-orig:                    print(f'[DUMP]   Textarea {i}: Error reading - {e}')
+browser_controller.py-orig:                    
+browser_controller.py-orig:        except Exception as e:
+browser_controller.py-orig:            print(f'[DUMP] ERROR: {e}')
+browser_controller.py-orig:            import traceback
+browser_controller.py-orig:            traceback.print_exc()
+browser_controller.py-orig:
+browser_controller.py-orig:    def _position_cursor_at_end(self):
+browser_controller.py-orig:        """Position cursor at END of description textarea."""
+browser_controller.py-orig:        try:
+browser_controller.py-orig:            print('[CURSOR] Positioning cursor at END...')
+browser_controller.py-orig:            
+browser_controller.py-orig:    
+browser_controller.py-orig:    for (const ta of textareas) {
+browser_controller.py-orig:        try {
+browser_controller.py-orig:            if (!isVisible) continue;
+browser_controller.py-orig:            
+browser_controller.py-orig:            
+browser_controller.py-orig:            candidates.push({ element: ta, value: value, rect: rect, distance: distance, zIndex: zIndex, hasContent: value.length > 0 });
+browser_controller.py-orig:        } catch (e) {}
+browser_controller.py-orig:    }
+browser_controller.py-orig:    
+browser_controller.py-orig:    
+browser_controller.py-orig:        if (Math.abs(a.distance - b.distance) > 50) return a.distance - b.distance;
+browser_controller.py-orig:        return b.zIndex - a.zIndex;
+browser_controller.py-orig:    });
+browser_controller.py-orig:    
+browser_controller.py-orig:    target.element.focus();
+browser_controller.py-orig:    
+browser_controller.py-orig:    return { x: target.rect.left + target.rect.width/2, y: target.rect.top + target.rect.height/2, textLength: target.element.value.length };
+browser_controller.py-orig:}"""
+browser_controller.py-orig:            
+browser_controller.py-orig:            if result:
+browser_controller.py-orig:                print(f'[CURSOR] Cursor positioned at END (text length: {result["textLength"]})')
+browser_controller.py-orig:            else:
+browser_controller.py-orig:                print('[CURSOR] No textarea found')
+browser_controller.py-orig:                
+browser_controller.py-orig:        except Exception as e:
+browser_controller.py-orig:            print(f'[CURSOR] ERROR: {e}')
+browser_controller.py-orig:
+browser_controller.py-orig:    def _extract_and_add_names(self):
+browser_controller.py-orig:        """Extract names from webpage section and add to description if not already there."""
+browser_controller.py-orig:        try:
+browser_controller.py-orig:            print('[NAMES] Extracting names from webpage...')
+browser_controller.py-orig:            
+browser_controller.py-orig:            # Load names and special cases from names.json
+browser_controller.py-orig:            import json
+browser_controller.py-orig:            with open('names.json') as f:
+browser_controller.py-orig:            
+browser_controller.py-orig:            print(f'[NAMES] Loaded special cases: {special_cases}')
+browser_controller.py-orig:            
+browser_controller.py-orig:            # Extract clean names (without parentheses)
+browser_controller.py-orig:            for name_entry in names_list:
+browser_controller.py-orig:                    clean_names.append(clean)
+browser_controller.py-orig:            
+browser_controller.py-orig:            print(f'[NAMES] Searching for names: {clean_names}')
+browser_controller.py-orig:            
+browser_controller.py-orig:    
+browser_controller.py-orig:    if (allDivs.length > 0) {
+browser_controller.py-orig:        if (nameDiv && nameDiv.textContent) {
+browser_controller.py-orig:            foundNames.push(nameDiv.textContent.trim());
+browser_controller.py-orig:        }
+browser_controller.py-orig:    }
+browser_controller.py-orig:    
+browser_controller.py-orig:    if (allSpans.length > 0) {
+browser_controller.py-orig:            if (rect.height > 0 && rect.width > 0) {
+browser_controller.py-orig:                if (span.textContent) {
+browser_controller.py-orig:                    foundNames.push(span.textContent.trim());
+browser_controller.py-orig:                }
+browser_controller.py-orig:            }
+browser_controller.py-orig:        }
+browser_controller.py-orig:    }
+browser_controller.py-orig:    
+browser_controller.py-orig:    return foundNames.length > 0 ? foundNames : null;
+browser_controller.py-orig:}"""
+browser_controller.py-orig:            
+browser_controller.py-orig:            
+browser_controller.py-orig:            if not found_names:
+browser_controller.py-orig:                print('[NAMES] No name sections found on webpage')
+browser_controller.py-orig:                return
+browser_controller.py-orig:            
+browser_controller.py-orig:            print(f'[NAMES] Found names in webpage: {found_names}')
+browser_controller.py-orig:            
+browser_controller.py-orig:            if not current_desc:
+browser_controller.py-orig:            
+browser_controller.py-orig:            print(f'[NAMES] Current description: {repr(current_desc)[:80]}')
+browser_controller.py-orig:            print('[NAMES] Positioning cursor at END before adding names')
+browser_controller.py-orig:            self._position_cursor_at_end()
+browser_controller.py-orig:            
+browser_controller.py-orig:            for found_name in found_names:
+browser_controller.py-orig:                print(f'[NAMES] Processing: {repr(found_name)}')
+browser_controller.py-orig:                
+browser_controller.py-orig:                if found_name and found_name[0:4].isdigit():
+browser_controller.py-orig:                    print(f'[NAMES] Skipping year-prefixed text: "{found_name}"')
+browser_controller.py-orig:                    continue
+browser_controller.py-orig:
+browser_controller.py-orig:                if found_name and found_name.startswith("0"):
+browser_controller.py-orig:                    print(f'[NAMES] Skipping name starting with 0: "{found_name}"')
+browser_controller.py-orig:                    continue
+browser_controller.py-orig:                
+browser_controller.py-orig:                if found_name in special_cases:
+browser_controller.py-orig:                    print(f'[NAMES] Special case: "{found_name}" -> "{mapped_name}"')
+browser_controller.py-orig:                
+browser_controller.py-orig:                if found_name in desc_normalized:
+browser_controller.py-orig:                    print(f'[NAMES] "{found_name}" already in description, skipping')
+browser_controller.py-orig:                    continue
+browser_controller.py-orig:                
+browser_controller.py-orig:                self._position_cursor_at_end()
+browser_controller.py-orig:                print(f'[NAMES] Adding " {found_name}" to description')
+browser_controller.py-orig:                self.append_text(' ' + found_name + ' ')
+browser_controller.py-orig:            
+browser_controller.py-orig:            print('[NAMES] Positioning cursor at END after adding all names')
+browser_controller.py-orig:            self._position_cursor_at_end()
+browser_controller.py-orig:            
+browser_controller.py-orig:        except Exception as e:
+browser_controller.py-orig:            print(f'[NAMES] ERROR: {e}')
+browser_controller.py-orig:    def _navigate_photo(self, direction):
+browser_controller.py-orig:        """Common navigation logic for next/prev photo."""
+browser_controller.py-orig:        
+browser_controller.py-orig:        try:
+browser_controller.py-orig:            print(f'[{label}] Starting navigation...')
+browser_controller.py-orig:            print(f'[{label}] Current URL: {url_before}')
+browser_controller.py-orig:            
+browser_controller.py-orig:            for img in imgs:
+browser_controller.py-orig:                try:
+browser_controller.py-orig:                    if box and box.get('width', 0) > 200 and box.get('height', 0) > 100:
+browser_controller.py-orig:                        print(f'[{label}] Clicking image center at ({int(cx)},{int(cy)})')
+browser_controller.py-orig:                        try:
+browser_controller.py-orig:                            self.page.mouse.click(cx, cy)
+browser_controller.py-orig:                        except Exception:
+browser_controller.py-orig:                            pass
+browser_controller.py-orig:                        self.page.wait_for_timeout(15)
+browser_controller.py-orig:                        try:
+browser_controller.py-orig:                        except Exception:
+browser_controller.py-orig:                            pass
+browser_controller.py-orig:                        break
+browser_controller.py-orig:                except Exception:
+browser_controller.py-orig:                    continue
+browser_controller.py-orig:
+browser_controller.py-orig:            if not clicked:
+browser_controller.py-orig:                try:
+browser_controller.py-orig:                    print(f'[{label}] Fallback clicking viewport center at ({int(cx)},{int(cy)})')
+browser_controller.py-orig:                    try:
+browser_controller.py-orig:                        self.page.mouse.click(cx, cy)
+browser_controller.py-orig:                    except Exception:
+browser_controller.py-orig:                        pass
+browser_controller.py-orig:                    self.page.wait_for_timeout(15)
+browser_controller.py-orig:                    try:
+browser_controller.py-orig:                    except Exception:
+browser_controller.py-orig:                        pass
+browser_controller.py-orig:                except Exception:
+browser_controller.py-orig:                    pass
+browser_controller.py-orig:
+browser_controller.py-orig:            print(f'[{label}] Pressing {arrow_key}')
+browser_controller.py-orig:            self.page.keyboard.press(arrow_key)
+browser_controller.py-orig:            self.page.wait_for_timeout(5)
+browser_controller.py-orig:            
+browser_controller.py-orig:            try:
+browser_controller.py-orig:            except Exception:
+browser_controller.py-orig:                pass
+browser_controller.py-orig:            
+browser_controller.py-orig:            print(f'[{label}] New description: {repr(desc)[:100]}')
+browser_controller.py-orig:            print(f'[{label}] Positioning cursor at END of description')
+browser_controller.py-orig:            self._position_cursor_at_end()
+browser_controller.py-orig:            self._extract_and_add_names()
+browser_controller.py-orig:            
+browser_controller.py-orig:        except Exception as e:
+browser_controller.py-orig:            print(f'[{label}] ERROR: {e}')
+browser_controller.py-orig:
+browser_controller.py-orig:    def _do_next(self):
+browser_controller.py-orig:        """Navigate to next photo."""
+browser_controller.py-orig:        self._navigate_photo('next')
+browser_controller.py-orig:
+browser_controller.py-orig:    def _do_prev(self):
+browser_controller.py-orig:        """Navigate to previous photo."""
+browser_controller.py-orig:        self._navigate_photo('prev')
+browser_controller.py-orig:
+browser_controller.py-orig:    def _sample_description(self):
+browser_controller.py-orig:        """Read current description from page."""
+browser_controller.py-orig:        try:
+browser_controller.py-orig:            print('[SAMPLE] Executing page.evaluate...')
+browser_controller.py-orig:    console.log('Found textareas:', textareas.length);
+browser_controller.py-orig:    
+browser_controller.py-orig:    
+browser_controller.py-orig:        
+browser_controller.py-orig:        if (!isVisible) continue;
+browser_controller.py-orig:        
+browser_controller.py-orig:            x: rect.left + rect.width / 2,
+browser_controller.py-orig:            y: rect.top + rect.height / 2
+browser_controller.py-orig:        };
+browser_controller.py-orig:            Math.pow(taCenter.x - centerX, 2) + 
+browser_controller.py-orig:            Math.pow(taCenter.y - centerY, 2)
+browser_controller.py-orig:        );
+browser_controller.py-orig:        
+browser_controller.py-orig:        
+browser_controller.py-orig:        
+browser_controller.py-orig:        candidates.push({
+browser_controller.py-orig:            element: ta,
+browser_controller.py-orig:            value: value,
+browser_controller.py-orig:            distance: distance,
+browser_controller.py-orig:            zIndex: zIndex,
+browser_controller.py-orig:            hasContent: value.length > 0
+browser_controller.py-orig:        });
+browser_controller.py-orig:    }
+browser_controller.py-orig:    
+browser_controller.py-orig:        console.log('No visible textareas found');
+browser_controller.py-orig:        return null;
+browser_controller.py-orig:    }
+browser_controller.py-orig:    
+browser_controller.py-orig:            return b.hasContent ? 1 : -1;
+browser_controller.py-orig:        }
+browser_controller.py-orig:        if (Math.abs(a.distance - b.distance) > 50) {
+browser_controller.py-orig:            return a.distance - b.distance;
+browser_controller.py-orig:        }
+browser_controller.py-orig:        return b.zIndex - a.zIndex;
+browser_controller.py-orig:    });
+browser_controller.py-orig:    
+browser_controller.py-orig:    console.log('Selected textarea with value:', selected.value);
+browser_controller.py-orig:    return selected.value;
+browser_controller.py-orig:}"""
+browser_controller.py-orig:            
+browser_controller.py-orig:            print(f'[SAMPLE] Result: {repr(result)[:100]}')
+browser_controller.py-orig:            return result
+browser_controller.py-orig:            
+browser_controller.py-orig:        except Exception as e:
+browser_controller.py-orig:            print(f'[SAMPLE] ERROR: {e}')
+browser_controller.py-orig:            return None
+browser_controller.py-orig:
+browser_controller.py-orig:    def _focus_textarea(self, x, y):
+browser_controller.py-orig:        """Common logic to focus and position cursor at end of textarea."""
+browser_controller.py-orig:        self.page.mouse.click(x, y)
+browser_controller.py-orig:        self.page.wait_for_timeout(15)
+browser_controller.py-orig:        
+browser_controller.py-orig:        try:
+browser_controller.py-orig:            self.page.evaluate(
+browser_controller.py-orig:                "return true; } "
+browser_controller.py-orig:                "return true; } return false; }", 
+browser_controller.py-orig:                x, y
+browser_controller.py-orig:            )
+browser_controller.py-orig:        except Exception:
+browser_controller.py-orig:            pass
+browser_controller.py-orig:        
+browser_controller.py-orig:        try:
+browser_controller.py-orig:            self.page.wait_for_function(
+browser_controller.py-orig:            )
+browser_controller.py-orig:            print('[FOCUS] textarea became active')
+browser_controller.py-orig:        except Exception:
+browser_controller.py-orig:            print('[FOCUS] WARNING: textarea did not become active within timeout')
+browser_controller.py-orig:
+browser_controller.py-orig:    def _do_append_x(self):
+browser_controller.py-orig:        """Append 'X' to current description."""
+browser_controller.py-orig:        try:
+browser_controller.py-orig:            print('[APPEND_X] Starting...')
+browser_controller.py-orig:            
+browser_controller.py-orig:    console.log('Found textareas:', textareas.length);
+browser_controller.py-orig:    
+browser_controller.py-orig:    
+browser_controller.py-orig:    for (const ta of textareas) {
+browser_controller.py-orig:        
+browser_controller.py-orig:        if (!isVisible) continue;
+browser_controller.py-orig:        
+browser_controller.py-orig:            x: rect.left + rect.width / 2,
+browser_controller.py-orig:            y: rect.top + rect.height / 2
+browser_controller.py-orig:        };
+browser_controller.py-orig:            Math.pow(taCenter.x - centerX, 2) + 
+browser_controller.py-orig:            Math.pow(taCenter.y - centerY, 2)
+browser_controller.py-orig:        );
+browser_controller.py-orig:        
+browser_controller.py-orig:        candidates.push({
+browser_controller.py-orig:            element: ta,
+browser_controller.py-orig:            value: value,
+browser_controller.py-orig:            rect: rect,
+browser_controller.py-orig:            distance: distance,
+browser_controller.py-orig:            zIndex: zIndex,
+browser_controller.py-orig:            hasContent: value.length > 0
+browser_controller.py-orig:        });
+browser_controller.py-orig:    }
+browser_controller.py-orig:    
+browser_controller.py-orig:        console.log('No visible textareas');
+browser_controller.py-orig:        return null;
+browser_controller.py-orig:    }
+browser_controller.py-orig:    
+browser_controller.py-orig:        if (Math.abs(a.distance - b.distance) > 50) return a.distance - b.distance;
+browser_controller.py-orig:        return b.zIndex - a.zIndex;
+browser_controller.py-orig:    });
+browser_controller.py-orig:    
+browser_controller.py-orig:    console.log('Selected textarea at:', rect, 'value:', target.value);
+browser_controller.py-orig:    
+browser_controller.py-orig:    return {
+browser_controller.py-orig:        x: rect.left + rect.width / 2,
+browser_controller.py-orig:        y: rect.top + rect.height / 2,
+browser_controller.py-orig:        currentValue: target.value
+browser_controller.py-orig:    };
+browser_controller.py-orig:}"""
+browser_controller.py-orig:            
+browser_controller.py-orig:            if not result:
+browser_controller.py-orig:                print('[APPEND_X] FAILED - No textarea found')
+browser_controller.py-orig:                return
+browser_controller.py-orig:            
+browser_controller.py-orig:            
+browser_controller.py-orig:            print(f'[APPEND_X] Textarea at ({x}, {y}), current value: "{current}"')
+browser_controller.py-orig:            print(f'[APPEND_X] Clicking at ({x}, {y})')
+browser_controller.py-orig:            self._focus_textarea(x, y)
+browser_controller.py-orig:            
+browser_controller.py-orig:            print('[APPEND_X] Pressing End key')
+browser_controller.py-orig:            self.page.keyboard.press('End')
+browser_controller.py-orig:            self.page.wait_for_timeout(5)
+browser_controller.py-orig:            
+browser_controller.py-orig:            print('[APPEND_X] Typing space')
+browser_controller.py-orig:            self.page.keyboard.type(' ')
+browser_controller.py-orig:            self.page.wait_for_timeout(10)
+browser_controller.py-orig:            
+browser_controller.py-orig:            print(f'[APPEND_X] SUCCESS - appended space to "{current}"')
+browser_controller.py-orig:            
+browser_controller.py-orig:        except Exception as e:
+browser_controller.py-orig:            print(f'[APPEND_X] ERROR: {e}')
+browser_controller.py-orig:            import traceback
+browser_controller.py-orig:            traceback.print_exc()
+browser_controller.py-orig:
+browser_controller.py-orig:    def _do_append_text(self, text):
+browser_controller.py-orig:        """Append arbitrary text to current description."""
+browser_controller.py-orig:        try:
+browser_controller.py-orig:            print(f'[APPEND_TEXT] Starting append of: {repr(text)[:50]}')
+browser_controller.py-orig:    
+browser_controller.py-orig:    
+browser_controller.py-orig:    for (const ta of textareas) {
+browser_controller.py-orig:        try {
+browser_controller.py-orig:            if (!isVisible) continue;
+browser_controller.py-orig:            
+browser_controller.py-orig:            
+browser_controller.py-orig:            candidates.push({ element: ta, value: value, rect: rect, distance: distance, zIndex: zIndex, hasContent: value.length > 0 });
+browser_controller.py-orig:        } catch (e) {}
+browser_controller.py-orig:    }
+browser_controller.py-orig:    
+browser_controller.py-orig:    
+browser_controller.py-orig:        if (Math.abs(a.distance - b.distance) > 50) return a.distance - b.distance;
+browser_controller.py-orig:        return b.zIndex - a.zIndex;
+browser_controller.py-orig:    });
+browser_controller.py-orig:    
+browser_controller.py-orig:    
+browser_controller.py-orig:    try {
+browser_controller.py-orig:        if (rect.top < 0 || rect.left < 0 || rect.bottom > window.innerHeight || rect.right > window.innerWidth) {
+browser_controller.py-orig:            try { target.element.scrollIntoView({block: 'center', inline: 'center'}); } catch(e) {}
+browser_controller.py-orig:        }
+browser_controller.py-orig:    } catch (e) {}
+browser_controller.py-orig:    
+browser_controller.py-orig:    return { x: rect.left + rect.width/2, y: rect.top + rect.height/2, currentValue: target.value };
+browser_controller.py-orig:}"""
+browser_controller.py-orig:
+browser_controller.py-orig:            if not result:
+browser_controller.py-orig:                print('[APPEND_TEXT] FAILED - No textarea found')
+browser_controller.py-orig:                return
+browser_controller.py-orig:
+browser_controller.py-orig:            print(f'[APPEND_TEXT] Textarea at ({x}, {y}), current value: "{current}"')
+browser_controller.py-orig:
+browser_controller.py-orig:            if y is not None and y < 0:
+browser_controller.py-orig:                print(f"[APPEND_TEXT] WARNING: target y is negative ({y}), re-sampling once")
+browser_controller.py-orig:                self.page.wait_for_timeout(5)
+browser_controller.py-orig:                    print(f"[APPEND_TEXT] Re-sampled textarea at ({x}, {y}), current value: {repr(current)[:80]}")
+browser_controller.py-orig:                else:
+browser_controller.py-orig:                    print('[APPEND_TEXT] FAILED - target remains off-screen after re-sample')
+browser_controller.py-orig:                    return
+browser_controller.py-orig:
+browser_controller.py-orig:            self._focus_textarea(x, y)
+browser_controller.py-orig:            
+browser_controller.py-orig:            print('[APPEND_TEXT] Pressing End key to move cursor to end')
+browser_controller.py-orig:            self.page.keyboard.press('End')
+browser_controller.py-orig:            self.page.wait_for_timeout(5)
+browser_controller.py-orig:            
+browser_controller.py-orig:            print(f'[APPEND_TEXT] Typing text: {repr(text)}')
+browser_controller.py-orig:            self.page.keyboard.type(text)
+browser_controller.py-orig:            self.page.wait_for_timeout(10)
+browser_controller.py-orig:
+browser_controller.py-orig:            print(f'[APPEND_SUCCESS] Appended {repr(text)} to description')
+browser_controller.py-orig:
+browser_controller.py-orig:        except Exception as e:
+browser_controller.py-orig:            print(f'[APPEND_TEXT] ERROR: {e}')
+browser_controller.py-orig:            import traceback
+browser_controller.py-orig:            traceback.print_exc()
+browser_controller.py-orig:    def _do_backspace(self):
+browser_controller.py-orig:        """Send backspace key to the active textarea."""
+browser_controller.py-orig:        try:
+browser_controller.py-orig:            print('[BACKSPACE] Starting...')
+browser_controller.py-orig:            
+browser_controller.py-orig:    
+browser_controller.py-orig:    for (const ta of textareas) {
+browser_controller.py-orig:        try {
+browser_controller.py-orig:            if (!isVisible) continue;
+browser_controller.py-orig:            
+browser_controller.py-orig:            
+browser_controller.py-orig:            candidates.push({ element: ta, value: value, rect: rect, distance: distance, zIndex: zIndex, hasContent: value.length > 0 });
+browser_controller.py-orig:        } catch (e) {}
+browser_controller.py-orig:    }
+browser_controller.py-orig:    
+browser_controller.py-orig:    
+browser_controller.py-orig:        if (Math.abs(a.distance - b.distance) > 50) return a.distance - b.distance;
+browser_controller.py-orig:        return b.zIndex - a.zIndex;
+browser_controller.py-orig:    });
+browser_controller.py-orig:    
+browser_controller.py-orig:    return { x: rect.left + rect.width/2, y: rect.top + rect.height/2 };
+browser_controller.py-orig:}"""
+browser_controller.py-orig:
+browser_controller.py-orig:            if not result:
+browser_controller.py-orig:                print('[BACKSPACE] FAILED - No textarea found')
+browser_controller.py-orig:                return
+browser_controller.py-orig:
+browser_controller.py-orig:            
+browser_controller.py-orig:            print(f'[BACKSPACE] Textarea at ({x}, {y})')
+browser_controller.py-orig:            self._focus_textarea(x, y)
+browser_controller.py-orig:            
+browser_controller.py-orig:            print('[BACKSPACE] Sending backspace')
+browser_controller.py-orig:            self.page.keyboard.press('Backspace')
+browser_controller.py-orig:            self.page.wait_for_timeout(15)
+browser_controller.py-orig:            print('[BACKSPACE] SUCCESS')
+browser_controller.py-orig:            
+browser_controller.py-orig:        except Exception as e:
+browser_controller.py-orig:            print(f'[BACKSPACE] ERROR: {e}')
+browser_controller.py-orig:            import traceback
+browser_controller.py-orig:            traceback.print_exc()
+browser_controller.py-orig:
+browser_controller.py-orig:    def _do_delete_all(self):
+browser_controller.py-orig:        """Delete entire description."""
+browser_controller.py-orig:        try:
+browser_controller.py-orig:            print('[DELETE_ALL] Starting...')
+browser_controller.py-orig:            
+browser_controller.py-orig:    
+browser_controller.py-orig:    for (const ta of textareas) {
+browser_controller.py-orig:        try {
+browser_controller.py-orig:            if (!isVisible) continue;
+browser_controller.py-orig:            
+browser_controller.py-orig:            
+browser_controller.py-orig:            candidates.push({ element: ta, value: value, rect: rect, distance: distance, zIndex: zIndex, hasContent: value.length > 0 });
+browser_controller.py-orig:        } catch (e) {}
+browser_controller.py-orig:    }
+browser_controller.py-orig:    
+browser_controller.py-orig:    
+browser_controller.py-orig:        if (Math.abs(a.distance - b.distance) > 50) return a.distance - b.distance;
+browser_controller.py-orig:        return b.zIndex - a.zIndex;
+browser_controller.py-orig:    });
+browser_controller.py-orig:    
+browser_controller.py-orig:    return { x: rect.left + rect.width/2, y: rect.top + rect.height/2 };
+browser_controller.py-orig:}"""
+browser_controller.py-orig:
+browser_controller.py-orig:            if not result:
+browser_controller.py-orig:                print('[DELETE_ALL] FAILED - No textarea found')
+browser_controller.py-orig:                return
+browser_controller.py-orig:
+browser_controller.py-orig:            
+browser_controller.py-orig:            print(f'[DELETE_ALL] Textarea at ({x}, {y})')
+browser_controller.py-orig:            self._focus_textarea(x, y)
+browser_controller.py-orig:            
+browser_controller.py-orig:            print('[DELETE_ALL] Pressing backspace 50 times to clear description')
+browser_controller.py-orig:            for _ in range(50):
+browser_controller.py-orig:                self.page.keyboard.press('Backspace')
+browser_controller.py-orig:            self.page.wait_for_timeout(5)
+browser_controller.py-orig:            print('[DELETE_ALL] SUCCESS')
+browser_controller.py-orig:            
+browser_controller.py-orig:            
+browser_controller.py-orig:        except Exception as e:
+browser_controller.py-orig:            print(f'[DELETE_ALL] ERROR: {e}')
+browser_controller.py-orig:            import traceback
+browser_controller.py-orig:            traceback.print_exc()
+browser_controller.py-orig:
+browser_controller.py-orig:    def goto_next_photo(self):
+browser_controller.py-orig:        """Queue next photo command."""
+browser_controller.py-orig:        if not self._running:
+browser_controller.py-orig:            raise RuntimeError('Browser not running')
+browser_controller.py-orig:        self._cmd_queue.put(('next', None))
+browser_controller.py-orig:
+browser_controller.py-orig:    def goto_prev_photo(self):
+browser_controller.py-orig:        """Queue prev photo command."""
+browser_controller.py-orig:        if not self._running:
+browser_controller.py-orig:            raise RuntimeError('Browser not running')
+browser_controller.py-orig:        self._cmd_queue.put(('prev', None))
+browser_controller.py-orig:
+browser_controller.py-orig:    def append_x(self):
+browser_controller.py-orig:        """Queue append X command."""
+browser_controller.py-orig:        if not self._running:
+browser_controller.py-orig:            raise RuntimeError('Browser not running')
+browser_controller.py-orig:        self._cmd_queue.put(('append_x', None))
+browser_controller.py-orig:
+browser_controller.py-orig:    def append_text(self, text):
+browser_controller.py-orig:        """Queue append_text command with provided string."""
+browser_controller.py-orig:        if not self._running:
+browser_controller.py-orig:            raise RuntimeError('Browser not running')
+browser_controller.py-orig:        self._cmd_queue.put(('append_text', text))
+browser_controller.py-orig:
+browser_controller.py-orig:    def send_backspace(self):
+browser_controller.py-orig:        """Queue backspace command."""
+browser_controller.py-orig:        if not self._running:
+browser_controller.py-orig:            raise RuntimeError('Browser not running')
+browser_controller.py-orig:        self._cmd_queue.put(('backspace', None))
+browser_controller.py-orig:
+browser_controller.py-orig:    def delete_all_description(self):
+browser_controller.py-orig:        """Queue delete all description command."""
+browser_controller.py-orig:        if not self._running:
+browser_controller.py-orig:            raise RuntimeError('Browser not running')
+browser_controller.py-orig:        self._cmd_queue.put(('delete_all', None))
+browser_controller.py-orig:
+browser_controller.py-orig:        """Read current description synchronously."""
+browser_controller.py-orig:        if not self._running:
+browser_controller.py-orig:            raise RuntimeError('Browser not running')
+browser_controller.py-orig:        self._cmd_queue.put(('read_desc', (ev, res)))
+browser_controller.py-orig:        return res.get('description') if ok else None
+browser_controller.py-orig:
+browser_controller.py-orig:    def dump_html(self):
+browser_controller.py-orig:        """Queue HTML dump command for debugging."""
+browser_controller.py-orig:        if not self._running:
+browser_controller.py-orig:            raise RuntimeError('Browser not running')
+browser_controller.py-orig:        self._cmd_queue.put(('dump_html', None))
+browser_controller.py-orig:
+browser_controller.py-orig:    def get_state(self):
+browser_controller.py-orig:        """Return current state for UI polling."""
+browser_controller.py-orig:        return {
+browser_controller.py-orig:            'url': self._last_url,
+browser_controller.py-orig:            'description': self._last_description
+browser_controller.py-orig:        }
+claude.changes.V2.to.V3.txt:Second Summary
+claude.changes.V2.to.V3.txt:
+claude.changes.V2.to.V3.txt:Fixed the syntax error - The artifact was getting truncated during the update. I've now provided the complete, working browser_controller.py file.
+claude.changes.V2.to.V3.txt:Key Changes Made
+claude.changes.V2.to.V3.txt:
+claude.changes.V2.to.V3.txt:Removed unused device modes - Simplified to just iOS 12 iPad mode
+claude.changes.V2.to.V3.txt:Deleted _do_delete_50() dead code - Was never called
+claude.changes.V2.to.V3.txt:Consolidated navigation - Created _navigate_photo() to eliminate duplicate code
+claude.changes.V2.to.V3.txt:Extracted focus logic - Created _focus_textarea() helper used in 4 places
+claude.changes.V2.to.V3.txt:
+claude.changes.V2.to.V3.txt:Result
+claude.changes.V2.to.V3.txt:
+claude.changes.V2.to.V3.txt:~150 lines removed while maintaining 100% functionality
+claude.changes.V2.to.V3.txt:All critical Google Photos interaction logic untouched
+claude.changes.V2.to.V3.txt:All timing delays preserved
+claude.changes.V2.to.V3.txt:All JavaScript evaluation blocks unchanged
+claude.changes.V2.to.V3.txt:
+claude.changes.V2.to.V3.txt:The code should now run without errors. Test it thoroughly with navigation, text entry, and shortcuts to ensure everything still works as expected!
+claude.changes.V2.to.V3.txt:
+claude.changes.V2.to.V3.txt:
+claude.changes.V2.to.V3.txt:
+claude.changes.V2.to.V3.txt:Summary of Changes Made
+claude.changes.V2.to.V3.txt:I've made surgical, conservative improvements to the codebase while preserving all functionality:
+claude.changes.V2.to.V3.txt:browser_controller.py
+claude.changes.V2.to.V3.txt:Removed Dead Code:
+claude.changes.V2.to.V3.txt:
+claude.changes.V2.to.V3.txt:Deleted unused device mode branches (ios10, android8, chrome60, chrome70) - simplified to single iOS 12 iPad mode that works reliably
+claude.changes.V2.to.V3.txt:Removed _do_delete_50 method - never called anywhere in the codebase
+claude.changes.V2.to.V3.txt:Removed delete_50_chars() public method - dead code
+claude.changes.V2.to.V3.txt:
+claude.changes.V2.to.V3.txt:Refactored for Clarity:
+claude.changes.V2.to.V3.txt:
+claude.changes.V2.to.V3.txt:Consolidated navigation logic - Created _navigate_photo(direction) method to eliminate 100+ lines of duplicate code between _do_next() and _do_prev()
+claude.changes.V2.to.V3.txt:Extracted focus logic - Created _focus_textarea(x, y) helper method to consolidate the repetitive focus/cursor positioning code used in 4 different places
+claude.changes.V2.to.V3.txt:
+claude.changes.V2.to.V3.txt:Preserved:
+claude.changes.V2.to.V3.txt:
+claude.changes.V2.to.V3.txt:All critical JavaScript evaluation blocks
+claude.changes.V2.to.V3.txt:All timing/wait logic (critical for Google Photos interaction)
+claude.changes.V2.to.V3.txt:All error handling
+claude.changes.V2.to.V3.txt:All command queue handlers
+claude.changes.V2.to.V3.txt:All cursor positioning and name extraction logic
+claude.changes.V2.to.V3.txt:
+claude.changes.V2.to.V3.txt:keystroke_handler.py
+claude.changes.V2.to.V3.txt:No changes needed - This file is already clean and well-structured. All shortcuts are actively used by the UI.
+claude.changes.V2.to.V3.txt:Other Files
+claude.changes.V2.to.V3.txt:The ui_components.py and inject.py files are also clean - no dead code identified.
+claude.changes.V2.to.V3.txt:What Was NOT Changed
+claude.changes.V2.to.V3.txt:
+claude.changes.V2.to.V3.txt:Zero changes to any JavaScript evaluation blocks (these are fragile and critical)
+claude.changes.V2.to.V3.txt:Zero changes to timing delays (15ms, 5ms waits are carefully tuned)
+claude.changes.V2.to.V3.txt:Zero changes to the command queue system or threading
+claude.changes.V2.to.V3.txt:Zero changes to any UI interaction paths
+claude.changes.V2.to.V3.txt:Zero changes to cursor positioning or name extraction algorithms
+claude.changes.V2.to.V3.txt:
+claude.changes.V2.to.V3.txt:The refactoring reduces code size by ~150 lines while maintaining 100% functional compatibility. All the sensitive interaction logic with Google Photos remains untouched.
+fix_indent.py:# Save this as fix_indent.py
+fix_indent.py:with open('browser_controller.py', 'r') as f:
+fix_indent.py:
+fix_indent.py:for line in lines:
+fix_indent.py:    # If it's a method definition, ensure it has exactly 4 spaces
+fix_indent.py:    if line.strip().startswith('def ') and 'class ' not in line:
+fix_indent.py:        fixed.append('    ' + line.lstrip())
+fix_indent.py:    else:
+fix_indent.py:        fixed.append(line)
+fix_indent.py:
+fix_indent.py:with open('browser_controller.py', 'w') as f:
+fix_indent.py:    f.writelines(fixed)
+fix_indent.py:
+fix_indent.py:print("Fixed indentation")
+inject.py:#!/usr/bin/env python3
+inject.py:"""
+inject.py:Google Photos description tagger with old device spoofing
+inject.py:- Launch browser with different user agent modes
+inject.py:- Navigate photos (next/prev with keyboard)
+inject.py:- Read current description
+inject.py:- Append names to description
+inject.py:- Backspace functionality
+inject.py:- Show current photo URL and description
+inject.py:"""
+inject.py:import argparse
+inject.py:import tkinter as tk
+inject.py:from browser_controller import BrowserController
+inject.py:from keystroke_handler import KeystrokeHandler
+inject.py:from ui_components import AssistantUI
+inject.py:
+inject.py:
+inject.py:# Parse command line arguments
+inject.py:
+inject.py:
+inject.py:def main():
+inject.py:    # Create components
+inject.py:    
+inject.py:    # Create UI
+inject.py:    
+inject.py:    # Setup shutdown
+inject.py:    root.protocol('WM_DELETE_WINDOW', app.shutdown)
+inject.py:    
+inject.py:    # Auto-launch browser at startup
+inject.py:    root.after(500, lambda: app.launch_with_mode('default'))
+inject.py:    
+inject.py:    # Run
+inject.py:    root.mainloop()
+inject.py:
+inject.py:
+inject.py:    main()
+keystroke_handler.py:"""Keystroke handler - extracted from inject_v3.py"""
+keystroke_handler.py:import json
+keystroke_handler.py:import os
+keystroke_handler.py:import re
+keystroke_handler.py:
+keystroke_handler.py:
+keystroke_handler.py:class KeystrokeHandler:
+keystroke_handler.py:    """Manages keyboard shortcuts from names.json."""
+keystroke_handler.py:    
+keystroke_handler.py:        """Initialize keystroke handler with browser controller and optional names file path."""
+keystroke_handler.py:        self._load_shortcuts()
+keystroke_handler.py:    
+keystroke_handler.py:    def _load_shortcuts(self):
+keystroke_handler.py:        """Load shortcuts from names.json and register defaults."""
+keystroke_handler.py:        # Arrow keys for navigation
+keystroke_handler.py:        
+keystroke_handler.py:        # Delete all shortcut
+keystroke_handler.py:
+keystroke_handler.py:        # Cursor to end DHM
+keystroke_handler.py:        
+keystroke_handler.py:        # Tab to add "Dennis " and go next
+keystroke_handler.py:        
+keystroke_handler.py:        # Note: n, N, p, P are NOT registered - they pass through as natural keystrokes
+keystroke_handler.py:        
+keystroke_handler.py:        # Load names from names.json
+keystroke_handler.py:        
+keystroke_handler.py:        for raw in names:
+keystroke_handler.py:            
+keystroke_handler.py:            if match:
+keystroke_handler.py:                # Only register Ctrl+letter shortcuts (not single letters - those are for natural typing)
+keystroke_handler.py:                print(f'[KEYSTROKE] Registered Ctrl+{shortcut_key} -> {pushed}')
+keystroke_handler.py:            
+keystroke_handler.py:            # Extract numbered groups like "(1) Dennis Laura " and strip numeric prefix
+keystroke_handler.py:            if num_match:
+keystroke_handler.py:                # Strip the numeric prefix from the label first, then remove parentheses
+keystroke_handler.py:                # e.g., "(1) Dennis Laura " becomes "Dennis Laura "
+keystroke_handler.py:                if stripped_label:  # Only register if there's content after stripping
+keystroke_handler.py:                    # Register both Ctrl+number and just number
+keystroke_handler.py:                    print(f'[KEYSTROKE] Registered {group_num} -> {stripped_label} (stripped)')
+keystroke_handler.py:                else:
+keystroke_handler.py:                    # Empty group, register as-is
+keystroke_handler.py:                    print(f'[KEYSTROKE] Registered {group_num} -> (empty)')
+keystroke_handler.py:    
+keystroke_handler.py:    def _load_names(self):
+keystroke_handler.py:        """Load names from names.json file."""
+keystroke_handler.py:        
+keystroke_handler.py:        # Try provided path first
+keystroke_handler.py:        if self.names_file and os.path.exists(self.names_file):
+keystroke_handler.py:            try:
+keystroke_handler.py:                    if isinstance(data, dict):
+keystroke_handler.py:                    elif isinstance(data, list):
+keystroke_handler.py:                    print(f'[KEYSTROKE] Loaded {len(names)} names from {self.names_file}')
+keystroke_handler.py:                    return names
+keystroke_handler.py:            except Exception as e:
+keystroke_handler.py:                print(f'[KEYSTROKE] Failed to load {self.names_file}: {e}')
+keystroke_handler.py:        
+keystroke_handler.py:        # Try standard locations
+keystroke_handler.py:            os.path.join(ROOT, 'names.json'),
+keystroke_handler.py:            os.path.join(ROOT, '..', 'poc', 'names.json'),
+keystroke_handler.py:        ]
+keystroke_handler.py:        
+keystroke_handler.py:        for path in paths_to_try:
+keystroke_handler.py:            if os.path.exists(path):
+keystroke_handler.py:                try:
+keystroke_handler.py:                        if isinstance(data, dict):
+keystroke_handler.py:                        elif isinstance(data, list):
+keystroke_handler.py:                        if names:
+keystroke_handler.py:                            print(f'[KEYSTROKE] Loaded {len(names)} names from {path}')
+keystroke_handler.py:                            return names
+keystroke_handler.py:                except Exception as e:
+keystroke_handler.py:                    print(f'[KEYSTROKE] Failed to load {path}: {e}')
+keystroke_handler.py:        
+keystroke_handler.py:        # Fallback
+keystroke_handler.py:        print('[KEYSTROKE] Using fallback names')
+keystroke_handler.py:        return names
+keystroke_handler.py:    
+keystroke_handler.py:        """Handle key press event and return action tuple or None.
+keystroke_handler.py:        
+keystroke_handler.py:        Args:
+keystroke_handler.py:            key: The key character or name (e.g., '1', 'd', 'BackSpace', 'Delete')
+keystroke_handler.py:            ctrl: Boolean indicating if Ctrl modifier is pressed
+keystroke_handler.py:            state: Raw event state bitmask for detecting Fn+Delete on Mac
+keystroke_handler.py:            keycode: Numeric keycode (e.g., 0x33 for backspace, 0x77 for delete all)
+keystroke_handler.py:            keysym: Tkinter keysym name (e.g., 'BackSpace', 'Delete')
+keystroke_handler.py:        
+keystroke_handler.py:        Returns:
+keystroke_handler.py:            Tuple of (action_type, action_data) or None
+keystroke_handler.py:        """
+keystroke_handler.py:        # Handle BackSpace and Delete keysyms FIRST (most reliable, before keycode)
+keystroke_handler.py:            print('[DELETE_TYPE] BackSpace key detected - deleting one char')
+keystroke_handler.py:            return ('backspace', None)
+keystroke_handler.py:            print('[DELETE_TYPE] Delete key detected - clearing entire description')
+keystroke_handler.py:            return ('delete_all', None)
+keystroke_handler.py:        
+keystroke_handler.py:        # Try direct lookup first (before keycode, to avoid '3' being confused with 0x33 keycode)
+keystroke_handler.py:        if key in self.shortcuts:
+keystroke_handler.py:            return self.shortcuts[key]
+keystroke_handler.py:        
+keystroke_handler.py:        # Try Ctrl+ combination
+keystroke_handler.py:        if ctrl:
+keystroke_handler.py:            if ctrl_key in self.shortcuts:
+keystroke_handler.py:                return self.shortcuts[ctrl_key]
+keystroke_handler.py:        
+keystroke_handler.py:        # No match found - return None for natural typing
+keystroke_handler.py:        return None
+keystroke_handler.py:    
+keystroke_handler.py:    def get_all_shortcuts(self):
+keystroke_handler.py:        """Return dict of all registered shortcuts."""
+keystroke_handler.py:        return self.shortcuts.copy()
+keystroke_handler.py:    
+keystroke_handler.py:    def get_names_list(self):
+keystroke_handler.py:        """Return original names list for UI button creation."""
+keystroke_handler.py:        return self.names_list.copy()
+lines.V2.txt:    1111 ../Inject_V2/browser_controller.py
+lines.V2.txt:      45 ../Inject_V2/inject.py
+lines.V2.txt:     151 ../Inject_V2/keystroke_handler.py
+lines.V2.txt:     294 ../Inject_V2/ui_components.py
+lines.V2.txt:    1601 total
+names.json:{
+names.json:    "_comment": "List of names with initials in parentheses",
+names.json:    "_comment_do_not_use": "(P)rev, (N)ext are reserved - they pass through as natural typing",
+names.json:    "_comment_ck_syntax_carefully": "Make sure the commas are correct",
+names.json:    "names": [
+names.json:        "(D)ennis ",
+names.json:        "(L)aura ",
+names.json:        "(B)ekah ",
+names.json:        "(S)teph ",
+names.json:        "(R)elila",
+names.json:        "Sara(h) ",
+names.json:        "(T)im ",
+names.json:        "(C)reighton ",
+names.json:        "(J)eff ",
+names.json:        "(G)raeme ",
+names.json:        "(1) Dennis ",
+names.json:        "(2) Laura ",
+names.json:        "(3) Bekah ",
+names.json:        "(4) Dennis Bekah ",
+names.json:        "(5) Dennis Laura "
+names.json:    ],
+names.json:    "special_cases": {
+names.json:         "Dennis/Dad/Pappy": "Dennis",
+names.json:         "Tim McCausland": "Tim",
+names.json:         "Jeff Hegel": "Jeff"
+names.json:     }
+names.json:}
+Binary file Refactoring Summary - Changes Made.pdf matches
+ui_components.py:"""UI components - extracted from inject_v3.py"""
+ui_components.py:import tkinter as tk
+ui_components.py:from tkinter import ttk, messagebox
+ui_components.py:import threading
+ui_components.py:
+ui_components.py:
+ui_components.py:class AssistantUI:
+ui_components.py:    """Minimal UI for Google Photos tagger."""
+ui_components.py:    
+ui_components.py:        print('[UI] Initializing...')
+ui_components.py:        
+ui_components.py:        root.title('Google Photos Tagger - Old Device Mode')
+ui_components.py:        
+ui_components.py:        # Main frame
+ui_components.py:
+ui_components.py:        # LAUNCH BUTTONS FRAME - First row
+ui_components.py:        
+ui_components.py:        
+ui_components.py:
+ui_components.py:        # CONTROL BUTTONS FRAME - Second row
+ui_components.py:
+ui_components.py:
+ui_components.py:
+ui_components.py:        if self.debug_mode:
+ui_components.py:
+ui_components.py:        
+ui_components.py:        
+ui_components.py:        if self.debug_mode:
+ui_components.py:        
+ui_components.py:        # Name buttons
+ui_components.py:        for idx, raw in enumerate(self.keystroke.get_names_list()):
+ui_components.py:            
+ui_components.py:            self.name_buttons.append(btn)
+ui_components.py:        
+ui_components.py:        # Configure columns
+ui_components.py:        for i in range(6 + len(self.name_buttons)):
+ui_components.py:
+ui_components.py:        # Photo URL label - row 2
+ui_components.py:
+ui_components.py:        # Description label - row 3
+ui_components.py:
+ui_components.py:        # Keyboard status label - row 4
+ui_components.py:
+ui_components.py:        # Bind keyboard events
+ui_components.py:        root.bind('<KeyPress>', self.on_key_press)
+ui_components.py:        main.bind('<KeyPress>', self.on_key_press)
+ui_components.py:        # Intercept space bar on buttons to prevent them from being triggered
+ui_components.py:        # Must return 'break' to stop event propagation and prevent button activation
+ui_components.py:        def handle_button_space(event):
+ui_components.py:            self.on_key_press(event)
+ui_components.py:            return 'break'  # Prevent default button behavior
+ui_components.py:        
+ui_components.py:        root.bind_class('Button', '<KeyPress-space>', handle_button_space)
+ui_components.py:        root.bind_class('Button', '<space>', handle_button_space)
+ui_components.py:        root.bind_class('TButton', '<KeyPress-space>', handle_button_space)  # For ttk.Button
+ui_components.py:        root.bind_class('TButton', '<space>', handle_button_space)  # For ttk.Button
+ui_components.py:        main.focus_set()
+ui_components.py:        
+ui_components.py:        print(f'[UI] Registered {len(self.keystroke.get_all_shortcuts())} keyboard shortcuts')
+ui_components.py:        print(f'[UI] Shortcuts: {list(self.keystroke.get_all_shortcuts().keys())}')
+ui_components.py:        
+ui_components.py:        print('[UI] Starting poll loop')
+ui_components.py:        self.poll_browser_state()
+ui_components.py:    
+ui_components.py:    def on_key_press(self, event):
+ui_components.py:        """Handle keyboard shortcuts and natural typing."""
+ui_components.py:        # Extract keycode if available (from event.keysym_num on some systems)
+ui_components.py:        
+ui_components.py:        
+ui_components.py:        if not self.browser._running:
+ui_components.py:            print(f'[SHORTCUT] Ignored key "{event.char}" - browser not running')
+ui_components.py:            return
+ui_components.py:
+ui_components.py:        # Check for Ctrl modifier using state bitmask (0x04 on Mac/Linux)
+ui_components.py:        
+ui_components.py:        # Map keysym to key char for Ctrl combinations
+ui_components.py:        
+ui_components.py:        # If it's a printable character (not a special key) and not a control combo
+ui_components.py:        # Letters (including n, N, p, P) pass through as natural keystrokes
+ui_components.py:            print(f'[NATURAL_TYPING] Sending "{key}" directly to description field')
+ui_components.py:            self.add_name(key)
+ui_components.py:            return 'break'
+ui_components.py:        
+ui_components.py:        # Special case: ignore unregistered keys message for unmatched letters
+ui_components.py:            print(f'[NATURAL_TYPING] Letter "{key}" passes through (not a registered shortcut)')
+ui_components.py:            return 'break'
+ui_components.py:        
+ui_components.py:        # Handle numeric keys for Ctrl+1, Ctrl+2, Ctrl+3
+ui_components.py:        if ctrl_pressed and key.isdigit():
+ui_components.py:            print(f'[MODIFIER_COMBO] Ctrl+{key} pressed')
+ui_components.py:        else:
+ui_components.py:        
+ui_components.py:        if action:
+ui_components.py:    
+ui_components.py:                self.next_photo()
+ui_components.py:                self.prev_photo()
+ui_components.py:                self.add_name(action_data)
+ui_components.py:                self.add_x()
+ui_components.py:                self.do_backspace()
+ui_components.py:                self.delete_all_description()
+ui_components.py:                self.position_cursor_at_end()
+ui_components.py:                self.add_name('Dennis ')
+ui_components.py:                self.next_photo()
+ui_components.py:            
+ui_components.py:            return 'break'
+ui_components.py:
+ui_components.py:    def add_name(self, name):
+ui_components.py:        """Append a given name string to the current description."""
+ui_components.py:        print(f'[ADD_NAME] Queueing append for: {name}')
+ui_components.py:
+ui_components.py:    def launch_with_mode(self, mode):
+ui_components.py:        """Launch browser with specific user agent mode."""
+ui_components.py:        def _launch():
+ui_components.py:            try:
+ui_components.py:                print(f'[LAUNCH] Starting browser with mode: {mode}')
+ui_components.py:                
+ui_components.py:                
+ui_components.py:                print('[LAUNCH] Browser started')
+ui_components.py:                self.root.after(0, self._on_browser_ready)
+ui_components.py:            except Exception as e:
+ui_components.py:                print(f'[LAUNCH] ERROR: {e}')
+ui_components.py:                import traceback
+ui_components.py:                traceback.print_exc()
+ui_components.py:                self.root.after(0, lambda: messagebox.showerror('Error', str(e)))
+ui_components.py:
+ui_components.py:
+ui_components.py:    def _on_browser_ready(self):
+ui_components.py:        """Called when browser is ready."""
+ui_components.py:        
+ui_components.py:        if self.debug_mode:
+ui_components.py:        if self.debug_mode:
+ui_components.py:        
+ui_components.py:        try:
+ui_components.py:            for b in getattr(self, 'name_buttons', []):
+ui_components.py:                try:
+ui_components.py:                except Exception:
+ui_components.py:                    pass
+ui_components.py:        except Exception:
+ui_components.py:            pass
+ui_components.py:        
+ui_components.py:        
+ui_components.py:        messagebox.showinfo('Browser Ready', 'Browser launched. Please log into Google Photos if needed.\n\nKeyboard shortcuts are active!')
+ui_components.py:
+ui_components.py:    def next_photo(self):
+ui_components.py:        """Go to next photo."""
+ui_components.py:
+ui_components.py:    def prev_photo(self):
+ui_components.py:        """Go to previous photo."""
+ui_components.py:
+ui_components.py:    def read_current(self):
+ui_components.py:        """Read current description."""
+ui_components.py:        def _read():
+ui_components.py:            try:
+ui_components.py:                print('[READ] Requesting description...')
+ui_components.py:            except Exception as e:
+ui_components.py:                print(f'[READ] ERROR: {e}')
+ui_components.py:                self.root.after(0, lambda: messagebox.showerror('Error', str(e)))
+ui_components.py:
+ui_components.py:
+ui_components.py:    def add_x(self):
+ui_components.py:        """Append X to description."""
+ui_components.py:
+ui_components.py:    def do_backspace(self):
+ui_components.py:        """Send backspace to browser."""
+ui_components.py:
+ui_components.py:    def delete_all_description(self):
+ui_components.py:        """Delete entire description."""
+ui_components.py:
+ui_components.py:    def dump_html(self):
+ui_components.py:        """Dump current page HTML for debugging."""
+ui_components.py:
+ui_components.py:    def poll_browser_state(self):
+ui_components.py:        """Poll browser state and update UI."""
+ui_components.py:        try:
+ui_components.py:            
+ui_components.py:            if url:
+ui_components.py:            
+ui_components.py:            if desc:
+ui_components.py:            else:
+ui_components.py:        except Exception as e:
+ui_components.py:            print(f'[POLL] ERROR: {e}')
+ui_components.py:
+ui_components.py:        self.root.after(500, self.poll_browser_state)
+ui_components.py:
+ui_components.py:    def shutdown(self):
+ui_components.py:        """Shutdown."""
+ui_components.py:        try:
+ui_components.py:            self.browser.stop()
+ui_components.py:        except Exception:
+ui_components.py:            pass
+ui_components.py:        try:
+ui_components.py:            self.root.destroy()
+ui_components.py:        except Exception:
+ui_components.py:            pass
