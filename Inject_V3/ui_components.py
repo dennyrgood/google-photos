@@ -188,7 +188,9 @@ class AssistantUI:
                 print(f'[LAUNCH] ERROR: {e}')
                 import traceback
                 traceback.print_exc()
-                self.root.after(0, lambda: messagebox.showerror('Error', str(e)))
+                #self.root.after(0, lambda: messagebox.showerror('Error', str(e)))
+                error_msg = str(e)
+                self.root.after(0, lambda msg=error_msg: messagebox.showerror('Error', msg))
 
         threading.Thread(target=_launch, daemon=True).start()
 

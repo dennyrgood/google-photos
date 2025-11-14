@@ -28,6 +28,21 @@ class BrowserController:
         """Start browser worker thread."""
         if sync_playwright is None:
             raise RuntimeError('playwright not installed; run pip install -r requirements.txt')
+        
+        # Check if browser is already running
+        import os
+        import pathlib
+        user_data_dir = str(pathlib.Path.home() / '.googlephotos_profile')
+        lock_file = os.path.join(user_data_dir, 'SingletonLock')
+      
+        if os.path.exists(lock_file):
+            print(f'\n[ERROR] Browser appears to be already running!')
+            print(f'[ERROR] Lock file exists: {lock_file}')
+            print(f'[ERROR] Please close any existing browser windows first.')
+            print(f'[ERROR] If no browser is visible, remove the lock file manually.\n')
+            #raise RuntimeError(f'Browser already running (lock file: {lock_file})')
+            return  # Just return instead of raising exception
+
 
         if self._worker and self._worker.is_alive():
             return
@@ -63,15 +78,15 @@ class BrowserController:
                 user_data_dir=user_data_dir,
                 headless=not headful,
                 channel='chrome',
-                user_agent=user_agent,
-                viewport={'width': 1024, 'height': 768},
-                device_scale_factor=1,
-                is_mobile=True,
-                has_touch=True,
+                #user_agent=user_agent,
+                #viewport={'width': 1024, 'height': 768},
+                #device_scale_factor=1,
+                #is_mobile=True,
+                #has_touch=True,
                 args=[
                     '--disable-blink-features=AutomationControlled',
-                    '--user-agent=' + user_agent,
-                    '--disable-web-security',
+                    # '--user-agent=' + user_agent,
+                    # '--disable-web-security',
                 ],
             )
             
@@ -169,11 +184,11 @@ class BrowserController:
 
 
     def _position_cursor_at_end(self):
-      """Position cursor at END of description textarea."""
-      try:
-          print('[CURSOR] Positioning cursor at END...')
-          
-          js_find = """() => {
+        """Position cursor at END of description textarea."""
+        try:
+            print('[CURSOR] Positioning cursor at END...')
+            
+            js_find = """() => {
       const textareas = document.querySelectorAll('textarea[aria-label="Description"]');
       let candidates = [];
       const centerX = window.innerWidth / 2;
@@ -212,24 +227,78 @@ class BrowserController:
           value: target.value
       };
   }"""
-          
-          result = self.page.evaluate(js_find)
-          if not result:
-              print('[CURSOR] No textarea found')
-              return
-              
-          # Actually click and position the cursor
-          self.page.mouse.click(result['x'], result['y'])
-          self.page.wait_for_timeout(15)
-          self.page.keyboard.press('End')
-          self.page.wait_for_timeout(5)
-          
-          print(f'[CURSOR] Positioned cursor at END (text length: {result["textLength"]})')
-              
-      except Exception as e:
-          print(f'[CURSOR] ERROR: {e}')
-          import traceback
-          traceback.print_exc()
+            
+            result = self.page.evaluate(js_find)
+            if not result:
+                print('[CURSOR] No textarea found')
+                return
+                
+            # Click and PROPERLY focus the textarea (using the same logic as _focus_textarea)
+            self.page.mouse.click(result['x'], result['y'])
+            self.page.wait_for_timeout(15)
+            
+            # Ensure textarea is focused and cursor is at end via JavaScript
+            try:
+                self.page.evaluate(
+                    "(cx,cy) => { const el = document.elementFromPoint(cx, cy); "
+                    "if(el && el.tagName && el.tagName.toLowerCase() === 'textarea') { "
+                    "el.focus(); el.selectionStart = el.value.length; el.selectionEnd = el.value.length; "
+                    "return true; } "
+                    "const t = document.querySelector('textarea[aria-label=Description]'); "
+                    "if(t){ t.focus(); t.selectionStart = t.value.length; t.selectionEnd = t.value.length; "
+                    "return true; } return false; }", 
+                    result['x'], result['y']
+                )
+            except Exception:
+                pass
+            
+            # Wait for textarea to become active
+            try:
+                self.page.wait_for_function(
+                    "() => { const a = document.activeElement; "
+                    "return !!(a && a.getAttribute && a.getAttribute('aria-label') === 'Description'); }",
+                    timeout=2000,
+                )
+                print('[CURSOR] textarea became active')
+            except Exception:
+                print('[CURSOR] WARNING: textarea did not become active within timeout')
+            
+            # THEN press End key
+            self.page.keyboard.press('End')
+            self.page.wait_for_timeout(5)
+            
+            print(f'[CURSOR] Positioned cursor at END (text length: {result["textLength"]})')
+                
+        except Exception as e:
+            print(f'[CURSOR] ERROR: {e}')
+            import traceback
+            traceback.print_exc()
+
+        def _scroll_right_panel_to_top(self):
+            """Scroll the right information panel to the top to ensure description is visible."""
+            try:
+                print('[SCROLL] Ensuring right panel is scrolled to top...')
+                js_scroll = """() => {
+        // Focus the description textarea first
+        const textarea = document.querySelector('textarea.tL9Q4c');
+        if (textarea) textarea.focus();
+        // Then scroll the right panel
+        const container = document.querySelector('.ZPTMcc');
+        if (container) {
+            container.scrollTop = 0;
+            return { success: true, selector: '.ZPTMcc' };
+        }
+        return { success: false };
+    }"""
+                result = self.page.evaluate(js_scroll)
+                if result.get('success'):
+                    print(f'[SCROLL] Scrolled right panel to top (found: {result["selector"]})')
+                else:
+                    print('[SCROLL] Warning: Could not find scrollable right panel')
+            except Exception as e:
+                print(f'[SCROLL] Error: {e}')
+                # Don't fail the operation, log and continue
+
 
     def _extract_and_add_names(self):
         """Extract names from webpage section and add to description if not already there."""
@@ -738,6 +807,11 @@ class BrowserController:
             
             print(f'[BACKSPACE] Textarea at ({x}, {y})')
             self._focus_textarea(x, y)
+            
+            # Position cursor at END before backspacing
+            print('[BACKSPACE] Positioning cursor at END')
+            self.page.keyboard.press('End')
+            self.page.wait_for_timeout(5)
             
             print('[BACKSPACE] Sending backspace')
             self.page.keyboard.press('Backspace')
