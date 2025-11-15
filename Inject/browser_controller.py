@@ -763,11 +763,8 @@ class BrowserController:
             }""")
             print('[APPEND_TEXT] Scroll frozen')
             
-            self._focus_textarea(x, y)
-            
-            print('[APPEND_TEXT] Pressing End key to move cursor to end')
-            self.page.keyboard.press('End')
-            self.page.wait_for_timeout(5)
+            print('[APPEND_TEXT] Positioning cursor at END before typing')
+            self._position_cursor_at_end()
             
             print(f'[APPEND_TEXT] Typing text: {repr(text)}')
             self.page.keyboard.type(text)
