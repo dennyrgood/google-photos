@@ -165,13 +165,8 @@ class AssistantUI:
         # Letters (including n, N, p, P) pass through as natural keystrokes
         reserved_keys = {'=', '1', '2', '3', '4', '5', '6', '7', '8', '9'}
         if len(key) == 1 and key.isprintable() and not ctrl_pressed and event.char and key not in reserved_keys:
-            print(f'[NATURAL_TYPING] Sending "{key}" directly to description field')
-            self.add_name(key)
-            return 'break'
-        
-        # Special case: ignore unregistered keys message for unmatched letters
-        if len(key) == 1 and key.isalpha() and not self.keystroke.on_key_press(key, ctrl=ctrl_pressed, state=event.state, keycode=keycode, keysym=keysym):
-            print(f'[NATURAL_TYPING] Letter "{key}" passes through (not a registered shortcut)')
+            print(f'[KEYSTROKE] Sending "{key}" directly to web page')
+            self.browser.send_keystroke(key)
             return 'break'
         
         # Handle numeric keys for Ctrl+1, Ctrl+2, Ctrl+3

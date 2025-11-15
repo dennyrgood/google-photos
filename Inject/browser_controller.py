@@ -141,6 +141,8 @@ class BrowserController:
                     self._do_backspace()
                 elif cmd == 'delete_all':
                     self._do_delete_all()
+                elif cmd == 'keystroke':
+                    self.page.keyboard.press(arg)
 
         finally:
             try:
@@ -471,6 +473,10 @@ class BrowserController:
             print(f'[{label}] Step 7a: About to extract and add names...')
             self._extract_and_add_names()
             print(f'[{label}] Step 7b: Extract and add names completed')
+            
+            print(f'[{label}] Step 8: Focusing textarea for keystroke input...')
+            self._position_cursor_at_end()
+            print(f'[{label}] Step 8b: Textarea focused and cursor positioned at end')
             
         except Exception as e:
             print(f'[{label}] ERROR: {e}')
@@ -975,6 +981,12 @@ class BrowserController:
         if not self._running:
             raise RuntimeError('Browser not running')
         self._cmd_queue.put(('backspace', None))
+
+    def send_keystroke(self, key):
+        """Send a raw keystroke to the web page without any focus/cursor manipulation."""
+        if not self._running:
+            raise RuntimeError('Browser not running')
+        self._cmd_queue.put(('keystroke', key))
 
     def delete_all_description(self):
         """Queue delete all description command."""
