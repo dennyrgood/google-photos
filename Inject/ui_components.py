@@ -24,6 +24,8 @@ class AssistantUI:
         # ROW 0: Navigation and control buttons
         nav_frame = ttk.Frame(main)
         nav_frame.grid(row=0, column=0, columnspan=4, sticky='ew', pady=(0, 8))
+        # keep a reference so other methods can add/remove debug buttons later
+        self.nav_frame = nav_frame
 
         self.launch_default_btn = ttk.Button(nav_frame, text='LAUNCH', 
                                               command=lambda: self.launch_with_mode('default'))
@@ -35,26 +37,35 @@ class AssistantUI:
         self.next_btn = ttk.Button(nav_frame, text='NEXT →', command=self.next_photo, state='disabled')
         self.next_btn.grid(row=0, column=2, sticky='ew', padx=2)
 
-        # NOTE: "ADD Space" button removed per user request
+        # DEBUG toggle button (always visible)
+        self.debug_toggle_btn = ttk.Button(nav_frame, text='DEBUG', command=self.toggle_debug)
+        self.debug_toggle_btn.grid(row=0, column=3, sticky='ew', padx=2)
         
+        # Set initial button appearance based on debug_mode
+        if self.debug_mode:
+            try:
+                self.debug_toggle_btn.config(text='DEBUG ✓', style='Accent.TButton')
+            except:
+                self.debug_toggle_btn.config(text='DEBUG ✓')  # Fallback if style not available
+
         self.backspace_btn = ttk.Button(nav_frame, text='⌫ BACK', command=self.do_backspace, state='disabled')
         self.backspace_btn.grid(row=0, column=4, sticky='ew', padx=2)
         
         self.reload_btn = ttk.Button(nav_frame, text='↻ RELOAD', command=self.reload_names, state='disabled')
         self.reload_btn.grid(row=0, column=5, sticky='ew', padx=2)
         
-        # Debug buttons (optional)
+        # Debug buttons (optional) - create only if debug_mode at init, otherwise create lazily
         debug_col = 6
         if self.debug_mode:
-            self.read_btn = ttk.Button(nav_frame, text='READ', command=self.read_current, state='disabled')
+            self.read_btn = ttk.Button(self.nav_frame, text='READ', command=self.read_current, state='disabled')
             self.read_btn.grid(row=0, column=debug_col, sticky='ew', padx=2)
             debug_col += 1
             
-            self.dump_btn = ttk.Button(nav_frame, text='DUMP', command=self.dump_html, state='disabled')
+            self.dump_btn = ttk.Button(self.nav_frame, text='DUMP', command=self.dump_html, state='disabled')
             self.dump_btn.grid(row=0, column=debug_col, sticky='ew', padx=2)
             debug_col += 1
             
-            self.sum_btn = ttk.Button(nav_frame, text='SUM', command=self.dump_analysis, state='disabled')
+            self.sum_btn = ttk.Button(self.nav_frame, text='SUM', command=self.dump_analysis, state='disabled')
             self.sum_btn.grid(row=0, column=debug_col, sticky='ew', padx=2)
             debug_col += 1
         
@@ -77,11 +88,12 @@ class AssistantUI:
 
         # Description label - row 3 (only in debug mode)
         if self.debug_mode:
-            desc_frame = ttk.LabelFrame(main, text='Current Description')
-            desc_frame.grid(row=3, column=0, columnspan=4, sticky='nsew', pady=8)
-            self.desc_label = ttk.Label(desc_frame, text='(no description)', wraplength=600, justify='left')
+            self.desc_frame = ttk.LabelFrame(main, text='Current Description')
+            self.desc_frame.grid(row=3, column=0, columnspan=4, sticky='nsew', pady=8)
+            self.desc_label = ttk.Label(self.desc_frame, text='(no description)', wraplength=600, justify='left')
             self.desc_label.pack(padx=8, pady=8, anchor='w')
         else:
+            self.desc_frame = None
             self.desc_label = None
 
         # Keyboard status label - row 4
@@ -179,6 +191,78 @@ class AssistantUI:
             traceback.print_exc()
             messagebox.showerror('Reload Failed', f'Failed to reload names.json: {str(e)}')
     
+    def toggle_debug(self):
+        """Toggle debug mode on/off and update UI accordingly."""
+        self.debug_mode = not self.debug_mode
+        if self.debug_mode:
+            print('[DEBUG] Debug mode ENABLED')
+            try:
+                self.debug_toggle_btn.config(text='DEBUG ✓', style='Accent.TButton')
+            except:
+                self.debug_toggle_btn.config(text='DEBUG ✓')
+
+            # Create photo label if it doesn't exist
+            if not self.photo_label:
+                main = self.root.winfo_children()[0]  # Get main frame
+                self.photo_label = ttk.Label(main, text='Photo: (not connected)', font=('Courier', 10))
+                self.photo_label.grid(row=2, column=0, columnspan=4, sticky='w', pady=(8, 8))
+            else:
+                self.photo_label.grid()
+
+            # Create description frame if it doesn't exist
+            if not self.desc_frame:
+                main = self.root.winfo_children()[0]  # Get main frame
+                self.desc_frame = ttk.LabelFrame(main, text='Current Description')
+                self.desc_frame.grid(row=3, column=0, columnspan=4, sticky='nsew', pady=8)
+                self.desc_label = ttk.Label(self.desc_frame, text='(no description)', wraplength=600, justify='left')
+                self.desc_label.pack(padx=8, pady=8, anchor='w')
+            else:
+                self.desc_frame.grid()
+
+            # Show or lazily create debug buttons
+            col = self.nav_frame.grid_size()[0]
+            if not hasattr(self, 'read_btn'):
+                self.read_btn = ttk.Button(self.nav_frame, text='READ', command=self.read_current, state='disabled')
+                self.read_btn.grid(row=0, column=col, sticky='ew', padx=2)
+                col += 1
+            else:
+                self.read_btn.grid()
+
+            if not hasattr(self, 'dump_btn'):
+                self.dump_btn = ttk.Button(self.nav_frame, text='DUMP', command=self.dump_html, state='disabled')
+                self.dump_btn.grid(row=0, column=col, sticky='ew', padx=2)
+                col += 1
+            else:
+                self.dump_btn.grid()
+
+            if not hasattr(self, 'sum_btn'):
+                self.sum_btn = ttk.Button(self.nav_frame, text='SUM', command=self.dump_analysis, state='disabled')
+                self.sum_btn.grid(row=0, column=col, sticky='ew', padx=2)
+            else:
+                self.sum_btn.grid()
+
+        else:
+            print('[DEBUG] Debug mode DISABLED')
+            try:
+                self.debug_toggle_btn.config(text='DEBUG', style='')
+            except:
+                self.debug_toggle_btn.config(text='DEBUG')
+
+            # Hide photo label
+            if self.photo_label:
+                self.photo_label.grid_remove()
+
+            # Hide description frame
+            if self.desc_frame:
+                self.desc_frame.grid_remove()
+
+            # Hide debug buttons if they exist
+            if hasattr(self, 'read_btn'):
+                self.read_btn.grid_remove()
+            if hasattr(self, 'dump_btn'):
+                self.dump_btn.grid_remove()
+            if hasattr(self, 'sum_btn'):
+                self.sum_btn.grid_remove()
 
     def on_key_press(self, event):
         """Handle keyboard shortcuts and natural typing."""
@@ -269,13 +353,14 @@ class AssistantUI:
         
         self.prev_btn.config(state='normal')
         self.next_btn.config(state='normal')
-        if self.debug_mode:
-            self.read_btn.config(state='normal')
         self.backspace_btn.config(state='normal')
         self.reload_btn.config(state='normal')
-        if self.debug_mode:
+        if hasattr(self, 'read_btn'):
+            self.read_btn.config(state='normal')
+        if hasattr(self, 'dump_btn'):
             self.dump_btn.config(state='normal')
-            self.sum_btn.config(state='normal')         
+        if hasattr(self, 'sum_btn'):
+            self.sum_btn.config(state='normal')
         
         try:
             for b in getattr(self, 'name_buttons', []):
