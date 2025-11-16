@@ -3,13 +3,41 @@ import re
 from bs4 import BeautifulSoup
 import sys
 import os
+import json 
 
 # The user-provided file name will now be taken from command-line arguments
+
+def _load_name_data():
+    """Load names and special cases from names.json for simulation."""
+    names_file = 'names.json' # Assumes names.json is in the same directory
+    if not os.path.exists(names_file):
+        print(f"[SIMULATION] Warning: '{names_file}' not found. Cannot run name processing simulation.")
+        return [], {}
+
+    try:
+        with open(names_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            names_list = data.get('names', [])
+            special_cases = data.get('special_cases', {})
+            
+            # Extract clean names (used for reference, not mandatory for filtering in the original snippet)
+            clean_names = []
+            for name_entry in names_list:
+                clean = ''.join(c for c in name_entry if c not in '()').strip()
+                if clean and clean != '4':
+                    clean_names.append(clean)
+            
+            return clean_names, special_cases
+            
+    except Exception as e:
+        print(f"[SIMULATION] Error loading {names_file}: {e}")
+        return [], {}
 
 def find_textarea_div_info(file_path):
     """
     Parses HTML content from the given file path to find all <textarea> elements 
     and reports information about their immediate parent <div> containers.
+    This also provides the value corresponding to BrowserController._last_description.
     """
     try:
         # Read the entire file content from the specified path
@@ -18,10 +46,10 @@ def find_textarea_div_info(file_path):
     except FileNotFoundError:
         print(f"Error: The file '{file_path}' was not found.")
         print("Please ensure the file path is correct.")
-        return
+        return [], None, '(EMPTY)'
     except Exception as e:
         print(f"Error reading file: {e}")
-        return
+        return [], None, '(EMPTY)'
 
     # Initialize BeautifulSoup parser
     soup = BeautifulSoup(html_content, 'html.parser')
@@ -29,101 +57,229 @@ def find_textarea_div_info(file_path):
     # Find all <textarea> elements in the document
     textareas = soup.find_all('textarea')
 
+    current_desc = '(EMPTY)'
+    
     if not textareas:
         print(f"No <textarea> elements were found in '{file_path}'.")
-        return
+        return [], soup, current_desc
 
     print(f"--- Found {len(textareas)} <textarea> elements in '{file_path}' ---")
     
-    # List to store the relevant div info for summary
-    div_info_list = []
-    
-    for i, textarea in enumerate(textareas):
-        # 1. Get Textarea info (ID and Name are useful for targeting)
-        textarea_id = textarea.get('id', 'N/A')
-        textarea_name = textarea.get('name', 'N/A')
-        
-        # 2. Find the immediate parent <div>
-        parent_div = textarea.find_parent('div')
-        
-        div_info = {
-            'tag': 'N/A',
-            'id': 'N/A',
-            'class': 'N/A',
-        }
-        
-        if parent_div:
-            # 3. Get Parent Div info
-            div_info['tag'] = parent_div.name
-            div_info['id'] = parent_div.get('id', 'None')
-            
-            # The 'class' attribute returns a list, join it for cleaner output
-            classes = parent_div.get('class')
-            if classes:
-                div_info['class'] = ' '.join(classes)
-            else:
-                div_info['class'] = 'None'
-            
-            # Store primary info for summary
-            div_info_list.append({
-                'index': i + 1,
-                'textarea_id': textarea_id,
-                'div_id': div_info['id'],
-                'div_class': div_info['class']
-            })
-        
-        
-        print(f"\n[TEXTAREA {i + 1}]")
-        print(f"  > Textarea ID:   {textarea_id}")
-        print(f"  > Textarea Name: {textarea_name}")
-        
-        if parent_div:
-            print(f"  > Immediate Parent <{div_info['tag']}> Info:")
-            print(f"    - ID:    {div_info['id']}")
-            print(f"    - Class: {div_info['class']}")
-        else:
-            print("  > No immediate parent <div> found.")
-            
-        # Optional: Print the first 50 characters of the content if present
-        if textarea.string:
-             # Strip whitespace and print a snippet
-            snippet = textarea.string.strip()
-            print(f"  > Content Snippet: '{snippet[:50]}...'")
-            
-        # Optional: Print the full path (ancestors) for better context
-        path = []
-        element = textarea
-        # Traverse up from the textarea until we hit the <html> tag or run out of ancestors
-        while element and element.name != 'html':
-            id_attr = element.get('id', '')
-            class_attr = ' '.join(element.get('class', []))
-            
-            # Construct a CSS-selector like path segment
-            segment = element.name
-            if id_attr:
-                segment += f"#{id_attr}"
-            elif class_attr:
-                # Use the first class as a primary identifier if no ID
-                segment += f".{class_attr.split()[0]}"
-            
-            path.append(segment)
-            element = element.parent
-        
-        # Show path from 2 levels up to the immediate parent
-        # path[1] is the parent, path[2] is the grandparent
-        print(f"  > Ancestor Path (Parent > Grandparent): {' > '.join(path[1:3] or path[:1])} > ...")
-            
-    # Print the final summary of the target divs
-    if div_info_list:
-        print("\n" + "="*50)
-        print("SUMMARY: TARGET DIV INFORMATION")
-        print("="*50)
-        for item in div_info_list:
-            print(f"Textarea {item['index']}:")
-            print(f"  Target Div ID:    {item['div_id']}")
-            print(f"  Target Div Class: {item['div_class']}")
-        print("="*50)
+    # We only care about the description of the *first* textarea found for the simulation
+    textarea = textareas[0]
+    textarea_id = textarea.get('id', 'N/A')
+    textarea_name = textarea.get('name', 'N/A')
+    textarea_value = textarea.string or '(EMPTY)'
+    current_desc = textarea_value.strip()
 
+    print(f"\nTextarea 1 Details (The target description field):")
+    print(f"  ID:         {textarea_id}")
+    print(f"  Name:       {textarea_name}")
+    print(f"  Value (BrowserController._last_description):")
+    print(f"    '{current_desc[:60]}{'...' if len(current_desc) > 60 else ''}'")
+    
+    # Find the parent info for the first (and most relevant) textarea
+    parent_tag = textarea.find_parent('div')
+
+    if parent_tag:
+        div_id = parent_tag.get('id', 'N/A')
+        div_class = parent_tag.get('class', ['N/A'])[0]
+        
+        print(f"  Parent Tag: {parent_tag.name.upper()} (closest DIV ancestor)")
+        print(f"  Parent ID:  {div_id}")
+        print(f"  Parent Class: {div_class}")
+
+        path = []
+        element = parent_tag
+        while element and element.name not in ['html', 'body']:
+            identifier = f"#{element.get('id')}" if element.get('id') else f".{element.get('class')[0]}" if element.get('class') else ""
+            path.append(f"{element.name.upper()}{identifier}")
+            element = element.parent
+        path.reverse()
+        
+        print(f"  > Ancestor Path: {' > '.join(path[-3:-1] or path[:1])} > {path[-1]}")
+    
+    return [], soup, current_desc
+
+
+def find_injected_name_candidates(soup):
+    """
+    Extracts elements targeted by the _extract_and_add_names function
+    for name injection and returns the list of candidates.
+    
+    NOTE: This version is modified to report all 'Primary Name' candidates, 
+    even though the original JavaScript only looks at the last one.
+    """
+    print("\n" + "@"*50)
+    print("INJECTED NAME CANDIDATES (Targeted by _extract_and_add_names)")
+    print("@"*50)
+    
+    found_candidates = []
+    primary_candidates = []
+
+    # 1. Target 1: Div-based Name
+    # We will now iterate over ALL DgVY7 divs to find all potential album names.
+    all_dgvy7_divs = soup.find_all('div', class_='DgVY7')
+    
+    if all_dgvy7_divs:
+        
+        print(f"Primary Name Candidates (Target div.DgVY7 - {len(all_dgvy7_divs)} total):")
+        
+        # Iterate over all DgVY7 divs
+        for i, dgvy7_div in enumerate(all_dgvy7_divs):
+            # Look for the nested name div 'AJM7gb'
+            name_div = dgvy7_div.find('div', class_='AJM7gb')
+            
+            if name_div and name_div.text:
+                text = name_div.text.strip()
+                primary_candidates.append(text)
+                # Indicate which one the original script would have picked
+                if i == len(all_dgvy7_divs) - 1:
+                    print(f"  {i+1}: '{text}' <--- Original script only chose this one (the LAST)")
+                else:
+                    print(f"  {i+1}: '{text}'")
+            else:
+                print(f"  {i+1}: Not found or empty.")
+        
+        found_candidates.extend(primary_candidates)
+    else:
+        print("Primary Name Candidates (Target div.DgVY7): No matching containers found.")
+
+    # 2. Target 2: Span-based Names (last 5 visible)
+    # This logic remains the same as the original script targets all of them anyway
+    all_y8x4pc_spans = soup.find_all('span', class_='Y8X4Pc')
+    span_candidates = []
+    
+    if all_y8x4pc_spans:
+        # The script looks at the last 5 elements
+        spans_to_check = all_y8x4pc_spans[-5:] 
+        
+        print(f"\nContextual Names (Target span.Y8X4Pc - checking last {len(spans_to_check)}):")
+        
+        for i, span in enumerate(spans_to_check):
+            text = span.text.strip()
+            if text:
+                # Assuming non-empty text means it would pass the visibility check in the real script
+                span_candidates.append(text)
+                print(f"  {i+1}: '{text}'")
+        
+        found_candidates.extend(span_candidates)
+        
+        if not span_candidates and not primary_candidates:
+             print("  None of the last 5 spans contained visible text.")
+    else:
+        print("\nContextual Names (Target span.Y8X4Pc): No matching spans found.")
+
+    print("@"*50)
+    return found_candidates
+
+
+def simulate_name_processing(candidates, current_desc):
+    """
+    Simulates the filtering and processing logic of _extract_and_add_names.
+    """
+    print("\n" + "*"*50)
+    print("SIMULATION OF NAME APPENDING LOGIC")
+    print("*"*50)
+    
+    clean_names, special_cases = _load_name_data()
+    
+    if not candidates:
+        print("No candidates found to process.")
+        return
+
+    # Normalize the current description for comparison
+    current_desc = current_desc.strip()
+    desc_normalized = ' '.join(current_desc.split()).lower()
+    
+    names_to_append = []
+    
+    if desc_normalized == '(empty)':
+        desc_normalized = ''
+
+    # We must iterate over the full list of candidates found, as the filtering 
+    # logic depends on the order of iteration.
+    for original_name in candidates:
+        name_to_check = ' '.join(original_name.split())
+        
+        # 1. Year/Digit Prefix Check (e.g., skips '2022...')
+        if name_to_check and name_to_check[0:4].isdigit():
+            print(f"[SKIP] '{original_name}' -> Skipped (Starts with year/digit prefix)")
+            continue
+            
+        if name_to_check and name_to_check.startswith("0"):
+            print(f"[SKIP] '{original_name}' -> Skipped (Starts with '0')")
+            continue
+
+        # 2. Special Case Mapping
+        mapped_name = special_cases.get(name_to_check, name_to_check)
+        
+        if mapped_name != name_to_check:
+            print(f"[MAP] '{original_name}' -> Mapped to '{mapped_name}'")
+        
+        # 3. Duplication Check
+        # Normalize the name being checked for better comparison
+        normalized_name_check = ' '.join(mapped_name.split()).lower()
+        
+        # The duplication check in the original script is simply 'found_name in desc_normalized'
+        if normalized_name_check in desc_normalized or normalized_name_check in [n.lower() for n in names_to_append]:
+            print(f"[SKIP] '{original_name}' -> Skipped (Already in description or list of names to be added)")
+            continue
+            
+        # 4. Success - Name is prepared for addition
+        names_to_append.append(mapped_name)
+        print(f"[ADD] '{original_name}' -> ADDED as '{mapped_name}'")
+
+        # Update the normalized description *for the next iteration's check*
+        # This simulates the script's behavior of checking against the growing description
+        desc_normalized += ' ' + normalized_name_check
+
+
+    print("\n" + "-"*50)
+    if names_to_append:
+        print(f"Final Names That Would Be Appended: {names_to_append}")
+        print(f"Total appended: {len(names_to_append)}")
+    else:
+        print("No names passed all filtering checks to be appended.")
+    print("*"*50)
+
+    
+def find_other_contextual_info(soup):
+    """
+    Extracts high-level contextual information from the parsed HTML,
+    corresponding to data points used by BrowserController and AssistantUI.
+    """
+    print("\n" + "#"*50)
+    print("CONTEXTUAL INFORMATION (BrowserController & AssistantUI Data)")
+    print("#"*50)
+    
+    # 1. Page Title (Often used as photo metadata/name)
+    title = soup.find('title')
+    page_title = title.string.strip() if title else 'N/A'
+    print(f"Page Title (Metadata): {page_title}")
+
+    # 2. Canonical URL (Corresponds to BrowserController._last_url)
+    # Google Photos often uses <base href> and <link rel="canonical">
+    base_tag = soup.find('base')
+    base_href = base_tag.get('href') if base_tag else 'N/A'
+    
+    canonical_link = soup.find('link', rel='canonical')
+    canonical_href = canonical_link.get('href') if canonical_link else 'N/A'
+    
+    # The full URL is often base_href + canonical_href or simply the canonical_href
+    full_url = canonical_href if canonical_href != 'N/A' else base_href
+    print(f"Full Photo URL (BrowserController._last_url): {full_url}")
+
+    # 3. Short URL Preview (Corresponds to UI_COMPONENTS display logic)
+    if full_url != 'N/A':
+        # The UI uses url.split('/')[-1] to shorten the URL for display
+        short_url = full_url.split('/')[-1]
+        print(f"  > UI Preview Short URL: {short_url}")
+    else:
+        print("  > UI Preview Short URL: N/A")
+        
+    print("#"*50)
+    
 
 def main():
     """
@@ -137,16 +293,29 @@ def main():
         print("You must install it using: pip install beautifulsoup4")
         sys.exit(1)
         
-    # 2. Check for the correct number of command-line arguments
+    # 2. Check for the correct number of command-line arguments (only HTML file is needed now)
     if len(sys.argv) < 2:
-        print("Usage: ./textarea_finder.py <path_to_html_file>")
-        print("Example: ./textarea_finder.py gphotos_dump_1763247510.html")
+        print("Usage: ./dump-explorer.py <path_to_html_dump>")
+        print("Example: ./dump-explorer.py gphotos_dump_1763247510.html")
         sys.exit(1)
-
-    file_to_analyze = sys.argv[1]
+        
+    html_file_path = sys.argv[1]
     
-    print(f"Attempting to analyze file: {file_to_analyze}")
-    find_textarea_div_info(file_to_analyze)
+    # 3. Run the main analysis functions
+    
+    # Find Textarea Info and Current Description
+    div_info_list, soup, current_desc = find_textarea_div_info(html_file_path)
+    
+    if soup:
+        # Find Injected Name Candidates
+        candidates = find_injected_name_candidates(soup)
+        
+        # Simulate Processing Logic
+        simulate_name_processing(candidates, current_desc)
+        
+        # Find Other Contextual Info 
+        find_other_contextual_info(soup)
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
     main()

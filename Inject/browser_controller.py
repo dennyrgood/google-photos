@@ -283,6 +283,8 @@ class BrowserController:
             
             # Load names and special cases from names.json
             import json
+            import os # Needed for better error message on file not found
+            # NOTE: This assumes 'names.json' is accessible in the working directory
             with open('names.json') as f:
                 data = json.load(f)
                 names_list = data.get('names', [])
@@ -290,7 +292,7 @@ class BrowserController:
             
             print(f'[NAMES] Loaded special cases: {special_cases}')
             
-            # Extract clean names (without parentheses)
+            # Extract clean names (without parentheses) for logging
             clean_names = []
             for name_entry in names_list:
                 clean = ''.join(c for c in name_entry if c not in '()').strip()
@@ -299,33 +301,34 @@ class BrowserController:
             
             print(f'[NAMES] Searching for names: {clean_names}')
             
+            # JS logic to extract all candidates (incorporating the new iteration logic)
             js_find_names = """() => {
-    let foundNames = [];
-    const allDivs = document.querySelectorAll('div.DgVY7');
-    const allSpans = document.querySelectorAll('span.Y8X4Pc');
-    
-    if (allDivs.length > 0) {
-        const lastDiv = allDivs[allDivs.length - 1];
-        const nameDiv = lastDiv.querySelector('div.AJM7gb');
-        if (nameDiv && nameDiv.textContent) {
-            foundNames.push(nameDiv.textContent.trim());
-        }
-    }
-    
-    if (allSpans.length > 0) {
-        for (let i = Math.max(0, allSpans.length - 5); i < allSpans.length; i++) {
-            const span = allSpans[i];
-            const rect = span.getBoundingClientRect();
-            if (rect.height > 0 && rect.width > 0) {
-                if (span.textContent) {
-                    foundNames.push(span.textContent.trim());
+                let foundNames = [];
+
+                // 1. Primary Name Candidates (Album Name)
+                // MODIFIED: Iterate over ALL DgVY7 divs to capture all potential album titles.
+                const allPrimaryDivs = document.querySelectorAll('div.DgVY7');
+                for (const primaryDiv of allPrimaryDivs) {
+                    const nameDiv = primaryDiv.querySelector('div.AJM7gb');
+                    if (nameDiv && nameDiv.textContent) {
+                        foundNames.push(nameDiv.textContent.trim());
+                    }
                 }
-            }
-        }
-    }
-    
-    return foundNames.length > 0 ? foundNames : null;
-}"""
+
+                // 2. Contextual Names (People/Place Tags) - checking last 5
+                const allSpanNames = document.querySelectorAll('span.Y8X4Pc');
+                // The JS snippet needs to replicate the visibility check from the original
+                const spansToCheck = Array.from(allSpanNames).slice(-5);
+                for (const span of spansToCheck) {
+                    // Check for visibility (offsetHeight > 0)
+                    if (span.offsetHeight > 0 && span.textContent) {
+                        foundNames.push(span.textContent.trim());
+                    }
+                }
+                
+                // Return null if nothing is found, matching the original Python check
+                return foundNames.length > 0 ? foundNames : null;
+            }"""
             
             found_names = self.page.evaluate(js_find_names)
             
@@ -335,51 +338,73 @@ class BrowserController:
             
             print(f'[NAMES] Found names in webpage: {found_names}')
             
-            current_desc = self._sample_description()
+            # Retrieve the current description (assuming _sample_description exists)
+            current_desc = self._sample_description() 
             if not current_desc:
                 current_desc = ''
             
+            # Normalize description early for comparison
+            desc_normalized = ' '.join(current_desc.split()).lower()
+
             print(f'[NAMES] Current description: {repr(current_desc)[:80]}')
             
             if not avoid_scroll:
+                # Assuming _position_cursor_at_end exists
                 print('[NAMES] Positioning cursor at END before adding names')
                 self._position_cursor_at_end()
             else:
                 print('[NAMES] Skipping cursor positioning to avoid scroll')
-            
+                
             for found_name in found_names:
                 print(f'[NAMES] Processing: {repr(found_name)}')
-                found_name = ' '.join(found_name.split())
                 
-                if found_name and found_name[0:4].isdigit():
-                    print(f'[NAMES] Skipping year-prefixed text: "{found_name}"')
+                # Normalize spaces
+                name_to_check = ' '.join(found_name.split())
+                
+                # 1. Year/Digit Prefix Check
+                if name_to_check and name_to_check[0:4].isdigit():
+                    print(f'[NAMES] Skipping year-prefixed text: "{name_to_check}"')
                     continue
 
-                if found_name and found_name.startswith("0"):
-                    print(f'[NAMES] Skipping name starting with 0: "{found_name}"')
+                if name_to_check and name_to_check.startswith("0"):
+                    print(f'[NAMES] Skipping name starting with 0: "{name_to_check}"')
                     continue
                 
-                if found_name in special_cases:
-                    mapped_name = special_cases[found_name]
-                    print(f'[NAMES] Special case: "{found_name}" -> "{mapped_name}"')
+                # 2. Special Case Mapping
+                if name_to_check in special_cases:
+                    mapped_name = special_cases[name_to_check]
+                    print(f'[NAMES] Special case: "{name_to_check}" -> "{mapped_name}"')
                     found_name = mapped_name
-                
-                desc_normalized = ' '.join(current_desc.split())
-                if found_name in desc_normalized:
+                else:
+                    found_name = name_to_check # Use the cleaned version
+                    
+                # 3. Duplication Check
+                # Use the mapped name (or cleaned original) for duplication check
+                if found_name.lower() in desc_normalized: 
                     print(f'[NAMES] "{found_name}" already in description, skipping')
                     continue
                 
+                # 4. Append to description
                 if not avoid_scroll:
+                    # Assuming _position_cursor_at_end exists
                     self._position_cursor_at_end()
-                
+                    
                 print(f'[NAMES] Adding " {found_name}" to description')
+                # Assuming append_text exists
                 self.append_text(' ' + found_name + ' ')
+                
+                # Update normalized description for subsequent duplication checks in this loop
                 current_desc += ' ' + found_name + ' '
-            
+                desc_normalized = ' '.join(current_desc.split()).lower()
+                
             if not avoid_scroll:
+                # Assuming _position_cursor_at_end exists
                 print('[NAMES] Positioning cursor at END after adding all names')
                 self._position_cursor_at_end()
-            
+                
+        except FileNotFoundError as e:
+            # Catch the specific error for names.json not found
+            print(f'[NAMES] ERROR: Could not find or load names.json. Check working directory. ({e})')
         except Exception as e:
             print(f'[NAMES] ERROR: {e}')
     def _navigate_photo(self, direction):
