@@ -2,6 +2,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import threading
+import re
 
 
 class AssistantUI:
@@ -67,15 +68,21 @@ class AssistantUI:
         self.name_buttons = []
         self._create_name_buttons()
 
-        # Photo URL label - row 2
-        self.photo_label = ttk.Label(main, text='Photo: (not connected)', font=('Courier', 10))
-        self.photo_label.grid(row=2, column=0, columnspan=4, sticky='w', pady=(8, 8))
+        # Photo URL label - row 2 (only in debug mode)
+        if self.debug_mode:
+            self.photo_label = ttk.Label(main, text='Photo: (not connected)', font=('Courier', 10))
+            self.photo_label.grid(row=2, column=0, columnspan=4, sticky='w', pady=(8, 8))
+        else:
+            self.photo_label = None
 
-        # Description label - row 3
-        desc_frame = ttk.LabelFrame(main, text='Current Description')
-        desc_frame.grid(row=3, column=0, columnspan=4, sticky='nsew', pady=8)
-        self.desc_label = ttk.Label(desc_frame, text='(no description)', wraplength=600, justify='left')
-        self.desc_label.pack(padx=8, pady=8, anchor='w')
+        # Description label - row 3 (only in debug mode)
+        if self.debug_mode:
+            desc_frame = ttk.LabelFrame(main, text='Current Description')
+            desc_frame.grid(row=3, column=0, columnspan=4, sticky='nsew', pady=8)
+            self.desc_label = ttk.Label(desc_frame, text='(no description)', wraplength=600, justify='left')
+            self.desc_label.pack(padx=8, pady=8, anchor='w')
+        else:
+            self.desc_label = None
 
         # Keyboard status label - row 4
         self.keyboard_status = ttk.Label(main, text='Keyboard: Click window to focus, then press keys', 
@@ -104,25 +111,53 @@ class AssistantUI:
         self.poll_browser_state()
     
     def _create_name_buttons(self):
-        """Create name shortcut buttons from keystroke handler's names list."""
+        """Create name shortcut buttons from keystroke handler's names list.
+        Letter-based shortcuts on first row, number-based on second row."""
         # Clear existing buttons
         for btn in self.name_buttons:
             btn.destroy()
         self.name_buttons = []
         
-        # Create new buttons
-        for idx, raw in enumerate(self.keystroke.get_names_list()):
+        letter_buttons = []
+        number_buttons = []
+        
+        # Separate names into letter-based and number-based
+        for raw in self.keystroke.get_names_list():
+            if re.search(r'\(\d+\)', raw):  # Number-based like "(1) Dennis"
+                number_buttons.append(raw)
+            else:  # Letter-based like "(D)ennis"
+                letter_buttons.append(raw)
+        
+        # Create letter-based buttons on row 0
+        for idx, raw in enumerate(letter_buttons):
             label = raw
             pushed = ''.join(ch for ch in raw if ch not in '()')
             
             btn = ttk.Button(self.shortcut_frame, text=label, 
                             command=(lambda p=pushed: self.add_name(p)), 
                             state='disabled' if not self.browser._running else 'normal')
-            btn.grid(row=0, column=idx, sticky='ew', padx=2)
+            btn.grid(row=0, column=idx, sticky='ew', padx=2, pady=2)
             self.name_buttons.append(btn)
         
-        # Configure columns
-        for i in range(len(self.name_buttons)):
+        # Configure columns for row 0
+        for i in range(len(letter_buttons)):
+            self.shortcut_frame.columnconfigure(i, weight=1)
+        
+        # Create number-based buttons on row 1
+        for idx, raw in enumerate(number_buttons):
+            label = raw
+            # Strip the numeric prefix for display and pushing
+            stripped_label = re.sub(r'^\(\d+\)\s*', '', raw).strip()
+            pushed = ''.join(ch for ch in stripped_label if ch not in '()') if stripped_label else ''
+            
+            btn = ttk.Button(self.shortcut_frame, text=label, 
+                            command=(lambda p=pushed: self.add_name(p)), 
+                            state='disabled' if not self.browser._running else 'normal')
+            btn.grid(row=1, column=idx, sticky='ew', padx=2, pady=2)
+            self.name_buttons.append(btn)
+        
+        # Configure columns for row 1
+        for i in range(len(number_buttons)):
             self.shortcut_frame.columnconfigure(i, weight=1)
     
     def reload_names(self):
@@ -271,7 +306,8 @@ class AssistantUI:
                 print('[READ] Requesting description...')
                 desc = self.browser.read_description(timeout=8.0)
                 msg = desc if desc else '(no description)'
-                self.root.after(0, lambda m=msg: self.desc_label.config(text=m))
+                if self.desc_label:  # Only update if it exists
+                    self.root.after(0, lambda m=msg: self.desc_label.config(text=m))
             except Exception as e:
                 print(f'[READ] ERROR: {e}')
                 self.root.after(0, lambda: messagebox.showerror('Error', str(e)))
@@ -301,17 +337,19 @@ class AssistantUI:
         try:
             state = self.browser.get_state()
             
-            url = state.get('url')
-            if url:
-                short = url.split('/')[-1]
-                self.photo_label.config(text=f'Photo: {short}')
+            if self.photo_label:  # Only update if it exists
+                url = state.get('url')
+                if url:
+                    short = url.split('/')[-1]
+                    self.photo_label.config(text=f'Photo: {short}')
             
-            desc = state.get('description')
-            if desc:
-                preview = desc if len(desc) < 200 else (desc[:197] + '...')
-                self.desc_label.config(text=preview)
-            else:
-                self.desc_label.config(text='(no description)')
+            if self.desc_label:  # Only update if it exists
+                desc = state.get('description')
+                if desc:
+                    preview = desc if len(desc) < 200 else (desc[:197] + '...')
+                    self.desc_label.config(text=preview)
+                else:
+                    self.desc_label.config(text='(no description)')
         except Exception as e:
             print(f'[POLL] ERROR: {e}')
 
