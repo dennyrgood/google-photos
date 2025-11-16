@@ -53,6 +53,10 @@ class AssistantUI:
             self.dump_btn = ttk.Button(nav_frame, text='DUMP', command=self.dump_html, state='disabled')
             self.dump_btn.grid(row=0, column=debug_col, sticky='ew', padx=2)
             debug_col += 1
+            
+            self.sum_btn = ttk.Button(nav_frame, text='SUM', command=self.dump_analysis, state='disabled')
+            self.sum_btn.grid(row=0, column=debug_col, sticky='ew', padx=2)
+            debug_col += 1
         
         for i in range(debug_col):
             nav_frame.columnconfigure(i, weight=1)
@@ -239,6 +243,7 @@ class AssistantUI:
         self.reload_btn.config(state='normal')
         if self.debug_mode:
             self.dump_btn.config(state='normal')
+            self.sum_btn.config(state='normal')         
         
         try:
             for b in getattr(self, 'name_buttons', []):
@@ -291,6 +296,10 @@ class AssistantUI:
     def dump_html(self):
         """Dump current page HTML for debugging."""
         threading.Thread(target=self.browser.dump_html, daemon=True).start()
+
+    def dump_analysis(self):
+        """Run dump-explorer analysis on current page."""
+        threading.Thread(target=self.browser.dump_analysis, daemon=True).start()
 
     def poll_browser_state(self):
         """Poll browser state and update UI."""

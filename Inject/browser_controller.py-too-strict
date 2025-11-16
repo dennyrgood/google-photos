@@ -137,8 +137,6 @@ class BrowserController:
                     ev.set()
                 elif cmd == 'dump_html':
                     self._do_dump_html()
-                elif cmd == 'dump_analysis':
-                    self._do_dump_analysis()
                 elif cmd == 'backspace':
                     self._do_backspace()
                 elif cmd == 'delete_all':
@@ -247,203 +245,12 @@ class BrowserController:
                 
         except Exception as e:
             print(f'[CURSOR] ERROR: {e}')
-    def _do_dump_analysis(self):
-        """Run dump-explorer style analysis on current page."""
-        try:
-            print('\n' + '='*60)
-            print('[ANALYSIS] Starting dump-explorer analysis...')
-            print('='*60)
 
-            # Execute the analysis JavaScript
-            result = self.page.evaluate("""() => {
-                // Helper function to check if element is visually hidden
-                function isElementVisuallyHidden(element) {
-                    let current = element;
-                    while (current && current.tagName !== 'BODY') {
-                        if (current.getAttribute('aria-hidden') === 'true') {
-                            return true;
-                        }
-                        const style = current.getAttribute('style') || '';
-                        if (style.toLowerCase().includes('display: none') || style.toLowerCase().includes('display:none')) {
-                            return true;
-                        }
-                        current = current.parentElement;
-                    }
-                    return false;
-                }
-
-                // Find the active sidebar root
-                const textarea = document.querySelector('textarea');
-                if (!textarea) {
-                    return { error: 'No textarea found' };
-                }
-
-                let sidebarRoot = textarea.closest('.ZPTMcc');
-                if (!sidebarRoot) {
-                    sidebarRoot = textarea.closest('.YW656b');
-                }
-
-                if (!sidebarRoot) {
-                    return { error: 'No sidebar root found' };
-                }
-
-                const results = {
-                    sidebarClass: sidebarRoot.className,
-                    albums: [],
-                    allAlbums: [],
-                    faces: [],
-                    allFaces: [],
-                    currentDescription: textarea.value || '',
-                    textareaInfo: {
-                        ariaLabel: textarea.getAttribute('aria-label'),
-                        id: textarea.id,
-                        className: textarea.className
-                    }
-                };
-
-                // 1. Find ALL Album Names (div.DgVY7 > div.AJM7gb) in entire document
-                const allDgvy7DivsGlobal = document.querySelectorAll('div.DgVY7');
-                for (let i = 0; i < allDgvy7DivsGlobal.length; i++) {
-                    const dgvy7Div = allDgvy7DivsGlobal[i];
-                    const nameDiv = dgvy7Div.querySelector('div.AJM7gb');
-                    if (nameDiv && nameDiv.textContent) {
-                        const text = nameDiv.textContent.trim();
-                        const hidden = isElementVisuallyHidden(nameDiv);
-                        const inSidebar = sidebarRoot.contains(dgvy7Div);
-                        results.allAlbums.push({
-                            index: i + 1,
-                            text: text,
-                            hidden: hidden,
-                            inSidebar: inSidebar
-                        });
-                    }
-                }
-
-                // Find albums ONLY in sidebar (what the script actually uses)
-                const allDgvy7Divs = sidebarRoot.querySelectorAll('div.DgVY7');
-                for (let i = 0; i < allDgvy7Divs.length; i++) {
-                    const dgvy7Div = allDgvy7Divs[i];
-                    const nameDiv = dgvy7Div.querySelector('div.AJM7gb');
-                    if (nameDiv && nameDiv.textContent) {
-                        const text = nameDiv.textContent.trim();
-                        const hidden = isElementVisuallyHidden(nameDiv);
-                        results.albums.push({
-                            index: i + 1,
-                            text: text,
-                            hidden: hidden
-                        });
-                    }
-                }
-
-                // 2. Find ALL Face/People Tags (span.Y8X4Pc) in entire document
-                const allSpansGlobal = document.querySelectorAll('span.Y8X4Pc');
-                for (let i = 0; i < allSpansGlobal.length; i++) {
-                    const span = allSpansGlobal[i];
-                    const text = span.textContent.trim();
-                    if (text) {
-                        const hidden = isElementVisuallyHidden(span);
-                        const inSidebar = sidebarRoot.contains(span);
-                        results.allFaces.push({
-                            index: i + 1,
-                            text: text,
-                            hidden: hidden,
-                            inSidebar: inSidebar,
-                            offsetHeight: span.offsetHeight
-                        });
-                    }
-                }
-
-                // Find faces ONLY in sidebar (what the script actually uses)
-                const allSpans = sidebarRoot.querySelectorAll('span.Y8X4Pc');
-                const spansToCheck = Array.from(allSpans).slice(-5);
-
-                for (let i = 0; i < spansToCheck.length; i++) {
-                    const span = spansToCheck[i];
-                    const text = span.textContent.trim();
-                    if (text) {
-                        const hidden = isElementVisuallyHidden(span);
-                        results.faces.push({
-                            index: i + 1,
-                            text: text,
-                            hidden: hidden,
-                            offsetHeight: span.offsetHeight
-                        });
-                    }
-                }
-
-                return results;
-            }""")
-
-            if result.get('error'):
-                print(f'[ANALYSIS] ERROR: {result["error"]}')
-                return
-
-            # Print results
-            print(f'\n[ANALYSIS] Sidebar Root Class: {result.get("sidebarClass", "N/A")}')
-            textarea_info = result.get('textareaInfo', {})
-            print(f'[ANALYSIS] Textarea: aria-label="{textarea_info.get("ariaLabel", "N/A")}", id="{textarea_info.get("id", "N/A")}"')
-            print(f'[ANALYSIS] Current Description: "{result.get("currentDescription", "")[:80]}..."')
-
-            # ALL Albums (global search)
-            all_albums = result.get('allAlbums', [])
-            print(f'\n[ANALYSIS] === ALL ALBUMS FOUND IN DOCUMENT (div.DgVY7 > div.AJM7gb): {len(all_albums)} ===')
-            if all_albums:
-                for album in all_albums:
-                    status = 'HIDDEN' if album['hidden'] else 'VISIBLE'
-                    location = '*** IN SIDEBAR ***' if album['inSidebar'] else 'outside sidebar'
-                    print(f'[ANALYSIS]   {album["index"]}. "{album["text"]}" ({status}, {location})')
-            else:
-                print('[ANALYSIS]   (none found)')
-
-            # Albums in sidebar (what script uses)
-            albums = result.get('albums', [])
-            print(f'\n[ANALYSIS] --- ALBUMS IN SIDEBAR (what script would see): {len(albums)} ---')
-            if albums:
-                for album in albums:
-                    status = 'HIDDEN/IGNORED' if album['hidden'] else 'VISIBLE/PROCESSED'
-                    marker = '>>> SELECTED <<<' if not album['hidden'] else ''
-                    print(f'[ANALYSIS]   {album["index"]}. "{album["text"]}" ({status}) {marker}')
-            else:
-                print('[ANALYSIS]   (none found in sidebar)')
-
-            # ALL Faces (global search)
-            all_faces = result.get('allFaces', [])
-            print(f'\n[ANALYSIS] === ALL FACES FOUND IN DOCUMENT (span.Y8X4Pc): {len(all_faces)} ===')
-            if all_faces:
-                for face in all_faces:
-                    status = 'HIDDEN' if face['hidden'] else 'VISIBLE'
-                    location = '*** IN SIDEBAR ***' if face['inSidebar'] else 'outside sidebar'
-                    height_info = f'offsetHeight={face["offsetHeight"]}'
-                    print(f'[ANALYSIS]   {face["index"]}. "{face["text"]}" ({status}, {location}, {height_info})')
-            else:
-                print('[ANALYSIS]   (none found)')
-
-            # Faces in sidebar last 5 (what script uses)
-            faces = result.get('faces', [])
-            print(f'\n[ANALYSIS] --- FACES IN SIDEBAR LAST 5 (what script would see): {len(faces)} ---')
-            if faces:
-                for face in faces:
-                    status = 'HIDDEN/IGNORED' if face['hidden'] else 'VISIBLE/PROCESSED'
-                    marker = '>>> SELECTED <<<' if not face['hidden'] else ''
-                    height_info = f'offsetHeight={face["offsetHeight"]}'
-                    print(f'[ANALYSIS]   {face["index"]}. "{face["text"]}" ({status}, {height_info}) {marker}')
-            else:
-                print('[ANALYSIS]   (none found in sidebar last 5)')
-
-            print('\n' + '='*60)
-            print('[ANALYSIS] Analysis complete')
-            print('='*60 + '\n')
-
-        except Exception as e:
-            print(f'[ANALYSIS] ERROR: {e}')
-            import traceback
-            traceback.print_exc()
-
-    def _scroll_right_panel_to_top(self):
-        """Scroll the right information panel to the top to ensure description is visible."""
-        try:
-            print('[SCROLL] Ensuring right panel is scrolled to top...')
-            js_scroll = """() => {
+        def _scroll_right_panel_to_top(self):
+            """Scroll the right information panel to the top to ensure description is visible."""
+            try:
+                print('[SCROLL] Ensuring right panel is scrolled to top...')
+                js_scroll = """() => {
         // Focus the description textarea first
         const textarea = document.querySelector('textarea.tL9Q4c');
         if (textarea) textarea.focus();
@@ -455,25 +262,25 @@ class BrowserController:
         }
         return { success: false };
     }"""
-            result = self.page.evaluate(js_scroll)
-            if result.get('success'):
-                print(f'[SCROLL] Scrolled right panel to top (found: {result["selector"]})')
-            else:
-                print('[SCROLL] Warning: Could not find scrollable right panel')
-        except Exception as e:
-            print(f'[SCROLL] Error: {e}')
-            # Don't fail the operation, log and continue
+                result = self.page.evaluate(js_scroll)
+                if result.get('success'):
+                    print(f'[SCROLL] Scrolled right panel to top (found: {result["selector"]})')
+                else:
+                    print('[SCROLL] Warning: Could not find scrollable right panel')
+            except Exception as e:
+                print(f'[SCROLL] Error: {e}')
+                # Don't fail the operation, log and continue
 
 
     def _extract_and_add_names(self, avoid_scroll=True):
         """Extract names from webpage section and add to description if not already there.
-        
+
         Args:
             avoid_scroll: If True, skip clicking/positioning to avoid scrolling the right panel
         """
         try:
             print('[NAMES] Extracting names from webpage...')
-
+            
             # Load names and special cases from names.json
             import json
             import os
@@ -481,75 +288,92 @@ class BrowserController:
                 data = json.load(f)
                 names_list = data.get('names', [])
                 special_cases = data.get('special_cases', {})
-
+            
             print(f'[NAMES] Loaded special cases: {special_cases}')
-
+            
             # Extract clean names (without parentheses) for logging
             clean_names = []
             for name_entry in names_list:
                 clean = ''.join(c for c in name_entry if c not in '()').strip()
                 if clean and clean != '4':
                     clean_names.append(clean)
-
+            
             print(f'[NAMES] Searching for names: {clean_names}')
-
+            
             # JS logic to extract all candidates with visibility check
-            # CRITICAL CHANGE: Search entire document, not just sidebar
             js_find_names = """() => {
-            let foundNames = [];
+                let foundNames = [];
 
-            // Helper function to check if element is visually hidden
-            function isElementVisuallyHidden(element) {
-                let current = element;
-                while (current && current.tagName !== 'BODY') {
-                    // Check for aria-hidden="true"
-                    if (current.getAttribute('aria-hidden') === 'true') {
-                        return true;
-                    }
-                    // Check for inline style display: none
-                    const style = current.getAttribute('style') || '';
-                    if (style.toLowerCase().includes('display: none') || style.toLowerCase().includes('display:none')) {
-                        return true;
-                    }
-                    current = current.parentElement;
-                }
-                return false;
-            }
-            
-            // Search entire document for face/people tags
-            const allSpanNames = document.querySelectorAll('span.Y8X4Pc');
-            
-            // Check all spans for visibility
-            for (const span of allSpanNames) {
-                // For people/place tags, only check aria-hidden and display:none
-                // Must have content and not be hidden
-                if (span.textContent && !isElementVisuallyHidden(span) && span.offsetHeight > 0) {
-                    foundNames.push(span.textContent.trim());
-                }
-            }
-            
-            // Return null if nothing is found
-            return foundNames.length > 0 ? foundNames : null;
-        }"""
+                // 1. Find the active sidebar root to scope the search
+                const textarea = document.querySelector('textarea');
+                if (!textarea) return null;
 
+                // Traverse up to find the closest ancestor with class 'ZPTMcc' (the main details panel)
+                let sidebarRoot = textarea.closest('.ZPTMcc');
+
+                // Fallback, in case ZPTMcc structure changes
+                if (!sidebarRoot) {
+                    sidebarRoot = textarea.closest('.YW656b');
+                }
+
+                if (!sidebarRoot) {
+                    console.error('[NAMES] Could not find active sidebar root. Aborting name extraction.');
+                    return null;
+                }
+
+                // Helper function to check if element is visually hidden
+                // This checks for aria-hidden and display:none in ancestors
+                function isElementVisuallyHidden(element) {
+                    let current = element;
+                    while (current && current.tagName !== 'BODY') {
+                        // Check for aria-hidden="true"
+                        if (current.getAttribute('aria-hidden') === 'true') {
+                            return true;
+                        }
+                        // Check for inline style display: none
+                        const style = current.getAttribute('style') || '';
+                        if (style.toLowerCase().includes('display: none') || style.toLowerCase().includes('display:none')) {
+                            return true;
+                        }
+                        current = current.parentElement;
+                    }
+                    return false;
+                }
+                
+                // 2. Contextual Names (People/Place Tags) - Search ONLY within the sidebarRoot
+                const allSpanNames = sidebarRoot.querySelectorAll('span.Y8X4Pc');
+                // The script looks at the last 5 elements
+                const spansToCheck = Array.from(allSpanNames).slice(-5);
+                for (const span of spansToCheck) {
+                    // For people/place tags, we only check aria-hidden and display:none
+                    // NOT offsetHeight, as these elements may have offsetHeight=0 but still be visible
+                    if (span.textContent && !isElementVisuallyHidden(span)) {
+                        foundNames.push(span.textContent.trim());
+                    }
+                }
+                
+                // Return null if nothing is found, matching the original Python check
+                return foundNames.length > 0 ? foundNames : null;
+            }"""
+            
             found_names = self.page.evaluate(js_find_names)
-
+            
             if not found_names:
                 print('[NAMES] No name sections found on webpage')
                 return
-
+            
             print(f'[NAMES] Found names in webpage: {found_names}')
-
+            
             # Retrieve the current description
             current_desc = self._sample_description() 
             if not current_desc:
                 current_desc = ''
-
+            
             # Normalize description early for comparison
             desc_normalized = ' '.join(current_desc.split()).lower()
 
             print(f'[NAMES] Current description: {repr(current_desc)[:80]}')
-
+            
             if not avoid_scroll:
                 print('[NAMES] Positioning cursor at END before adding names')
                 self._position_cursor_at_end()
@@ -599,7 +423,7 @@ class BrowserController:
             if not avoid_scroll:
                 print('[NAMES] Positioning cursor at END after adding all names')
                 self._position_cursor_at_end()
-            
+                
         except FileNotFoundError as e:
             print(f'[NAMES] ERROR: Could not find or load names.json. Check working directory. ({e})')
         except Exception as e:
@@ -1278,14 +1102,3 @@ class BrowserController:
             'url': self._last_url,
             'description': self._last_description
         }
-
-    def dump_analysis(self):
-        """Run dump-explorer analysis on current page state.
-
-        This enqueues a 'dump_analysis' command for the worker to handle.
-        The worker must implement handling for the 'dump_analysis' command
-        (e.g. a `_do_dump_analysis` method) to perform the actual analysis.
-        """
-        if not self._running:
-            raise RuntimeError('Browser not running')
-        self._cmd_queue.put(('dump_analysis', None))

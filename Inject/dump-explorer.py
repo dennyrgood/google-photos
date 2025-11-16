@@ -5,7 +5,9 @@ import sys
 import os
 import json 
 
-# The user-provided file name will now be taken from command-line arguments
+# --- IMPORTANT: Set the target file path directly for this run ---
+TARGET_HTML_FILE = 'gphotos_dump_1763267163.html'
+# ------------------------------------------------------------------
 
 def _load_name_data():
     """Load names and special cases from names.json for simulation."""
@@ -37,7 +39,8 @@ def find_textarea_div_info(file_path):
     """
     Parses HTML content from the given file path to find all <textarea> elements 
     and reports information about their immediate parent <div> containers.
-    This also provides the value corresponding to BrowserController._last_description.
+    This also provides the value corresponding to BrowserController._last_description 
+    (from the first textarea found) for the name injection simulation.
     """
     try:
         # Read the entire file content from the specified path
@@ -46,10 +49,10 @@ def find_textarea_div_info(file_path):
     except FileNotFoundError:
         print(f"Error: The file '{file_path}' was not found.")
         print("Please ensure the file path is correct.")
-        return [], None, '(EMPTY)'
+        return [], None, '(EMPTY)', None
     except Exception as e:
         print(f"Error reading file: {e}")
-        return [], None, '(EMPTY)'
+        return [], None, '(EMPTY)', None
 
     # Initialize BeautifulSoup parser
     soup = BeautifulSoup(html_content, 'html.parser')
@@ -57,118 +60,207 @@ def find_textarea_div_info(file_path):
     # Find all <textarea> elements in the document
     textareas = soup.find_all('textarea')
 
+    # List to store the relevant info for summary/return
+    div_info_list = []
+    # current_desc must be taken from the first textarea for simulation purposes
     current_desc = '(EMPTY)'
+    target_textarea = None # Initialize target_textarea
     
     if not textareas:
         print(f"No <textarea> elements were found in '{file_path}'.")
-        return [], soup, current_desc
+        return [], soup, current_desc, None
 
     print(f"--- Found {len(textareas)} <textarea> elements in '{file_path}' ---")
-    
-    # We only care about the description of the *first* textarea found for the simulation
-    textarea = textareas[0]
-    textarea_id = textarea.get('id', 'N/A')
-    textarea_name = textarea.get('name', 'N/A')
-    textarea_value = textarea.string or '(EMPTY)'
-    current_desc = textarea_value.strip()
 
-    print(f"\nTextarea 1 Details (The target description field):")
-    print(f"  ID:         {textarea_id}")
-    print(f"  Name:       {textarea_name}")
-    print(f"  Value (BrowserController._last_description):")
-    print(f"    '{current_desc[:60]}{'...' if len(current_desc) > 60 else ''}'")
+    # The target textarea (for description) is always the first one found
+    target_textarea = textareas[0]
+    current_desc = (target_textarea.string or '').strip()
     
-    # Find the parent info for the first (and most relevant) textarea
-    parent_tag = textarea.find_parent('div')
-
-    if parent_tag:
-        div_id = parent_tag.get('id', 'N/A')
-        div_class = parent_tag.get('class', ['N/A'])[0]
+    for i, textarea in enumerate(textareas):
+        # 1. Get Textarea info (ID and Name are useful for targeting)
+        textarea_id = textarea.get('id', 'N/A')
+        textarea_name = textarea.get('name', 'N/A')
+        textarea_value = textarea.string or '(EMPTY)'
         
-        print(f"  Parent Tag: {parent_tag.name.upper()} (closest DIV ancestor)")
-        print(f"  Parent ID:  {div_id}")
-        print(f"  Parent Class: {div_class}")
+        info_item = {
+            'index': i + 1,
+            'textarea_id': textarea_id,
+            'textarea_name': textarea_name,
+            'value': textarea_value.strip(),
+            'div_id': 'N/A',
+            'div_class': 'N/A',
+            'ancestor_path': 'N/A'
+        }
 
-        path = []
-        element = parent_tag
-        while element and element.name not in ['html', 'body']:
-            identifier = f"#{element.get('id')}" if element.get('id') else f".{element.get('class')[0]}" if element.get('class') else ""
-            path.append(f"{element.name.upper()}{identifier}")
-            element = element.parent
-        path.reverse()
+        print(f"\nTextarea {i + 1} Details:")
+        if i == 0:
+             print(f"  (This is the target description field: BrowserController._last_description)")
         
-        print(f"  > Ancestor Path: {' > '.join(path[-3:-1] or path[:1])} > {path[-1]}")
+        print(f"  ID:         {info_item['textarea_id']}")
+        print(f"  Name:       {info_item['textarea_name']}")
+        print(f"  Value:      '{info_item['value'][:60]}{'...' if len(info_item['value']) > 60 else ''}'")
+
+        # Find the parent info
+        parent_tag = textarea.find_parent('div')
+
+        if parent_tag:
+            div_id = parent_tag.get('id', 'N/A')
+            div_class_list = parent_tag.get('class', ['N/A'])
+            div_class = div_class_list[0] if div_class_list else 'N/A'
+            
+            info_item['div_id'] = div_id
+            info_item['div_class'] = div_class
+
+            print(f"  Parent Tag: {parent_tag.name.upper()} (closest DIV ancestor)")
+            print(f"  Parent ID:  {div_id}")
+            print(f"  Parent Class: {div_class}")
+
+            path = []
+            element = parent_tag
+            while element and element.name not in ['html', 'body']:
+                identifier = f"#{element.get('id')}" if element.get('id') else f".{element.get('class')[0]}" if element.get('class') else ""
+                path.append(f"{element.name.upper()}{identifier}")
+                element = element.parent
+            path.reverse()
+            
+            # Show path from root to the immediate parent
+            path_display = ' > '.join(path)
+            info_item['ancestor_path'] = path_display
+
+            print(f"  > Ancestor Path: {path_display}")
+        
+        div_info_list.append(info_item)
     
-    return [], soup, current_desc
+    # Print the final summary of the target divs (consolidated view)
+    if div_info_list:
+        print("\n" + "="*50)
+        print("SUMMARY: TEXTAREA INFORMATION")
+        print("="*50)
+        for item in div_info_list:
+            print(f"Textarea {item['index']} (Name: {item['textarea_name']}):")
+            print(f"  Parent Div ID:    {item['div_id']}")
+            print(f"  Parent Div Class: {item['div_class']}")
+            print(f"  Value Preview:    '{item['value'][:40]}{'...' if len(item['value']) > 40 else ''}'")
+        print("="*50)
+
+    # Note: current_desc is the value of the *first* textarea, used for simulation
+    # Also return the target_textarea element to help find the correct ancestor
+    return div_info_list, soup, current_desc, target_textarea
 
 
-def find_injected_name_candidates(soup):
+def _find_closest_sidebar_root(target_element):
+    """
+    Finds the closest parent element that likely represents the root of the active 
+    details sidebar (to scope the search for album names). 
+    We look for the 'DIV.ZPTMcc' which usually contains the photo details.
+    """
+    if not target_element:
+        return None
+        
+    # Traverse up to find the closest ancestor with class 'ZPTMcc'
+    sidebar_root = target_element.find_parent('div', class_='ZPTMcc')
+    
+    if sidebar_root:
+        return sidebar_root
+    
+    # Fallback to the parent that holds the description input, if ZPTMcc is missed
+    return target_element.find_parent('div', class_='YW656b')
+
+
+def is_element_visually_hidden(element):
+    """
+    Checks for common attributes or styles that indicate an element is hidden
+    in the context of a Google Photos sidebar, using BeautifulSoup.
+    
+    NOTE: This is a heuristic check, as BeautifulSoup cannot run CSS layout.
+    """
+    current = element
+    while current and current.name != 'body':
+        # 1. Check for aria-hidden="true" (Strong indicator for non-visual elements)
+        if current.get('aria-hidden') == 'true':
+            return True
+        # 2. Check for inline style display: none
+        style = current.get('style', '')
+        if 'display: none' in style.lower():
+            return True
+        current = current.parent
+    return False
+
+def find_injected_name_candidates(soup, target_textarea):
     """
     Extracts elements targeted by the _extract_and_add_names function
-    for name injection and returns the list of candidates.
-    
-    NOTE: This version is modified to report all 'Primary Name' candidates, 
-    even though the original JavaScript only looks at the last one.
+    for name injection and returns the list of candidates, applying a 
+    visibility filter.
     """
     print("\n" + "@"*50)
     print("INJECTED NAME CANDIDATES (Targeted by _extract_and_add_names)")
     print("@"*50)
     
-    found_candidates = []
-    primary_candidates = []
-
-    # 1. Target 1: Div-based Name
-    # We will now iterate over ALL DgVY7 divs to find all potential album names.
-    all_dgvy7_divs = soup.find_all('div', class_='DgVY7')
+    # Find the root of the *active* sidebar panel using the description field as a starting point
+    sidebar_root = _find_closest_sidebar_root(target_textarea)
     
-    if all_dgvy7_divs:
-        
-        print(f"Primary Name Candidates (Target div.DgVY7 - {len(all_dgvy7_divs)} total):")
-        
-        # Iterate over all DgVY7 divs
-        for i, dgvy7_div in enumerate(all_dgvy7_divs):
-            # Look for the nested name div 'AJM7gb'
-            name_div = dgvy7_div.find('div', class_='AJM7gb')
-            
-            if name_div and name_div.text:
-                text = name_div.text.strip()
-                primary_candidates.append(text)
-                # Indicate which one the original script would have picked
-                if i == len(all_dgvy7_divs) - 1:
-                    print(f"  {i+1}: '{text}' <--- Original script only chose this one (the LAST)")
-                else:
-                    print(f"  {i+1}: '{text}'")
-            else:
-                print(f"  {i+1}: Not found or empty.")
-        
-        found_candidates.extend(primary_candidates)
-    else:
-        print("Primary Name Candidates (Target div.DgVY7): No matching containers found.")
+    if not sidebar_root:
+        print("ERROR: Could not find the active sidebar root (ZPTMcc or YW656b). Aborting search.")
+        return []
+    
+    # Safety check for class existence before printing
+    sidebar_class = sidebar_root.get('class')[0] if sidebar_root.get('class') else 'N/A'
+    print(f"Scoped search to active sidebar root: <div class='{sidebar_class}...'>")
 
-    # 2. Target 2: Span-based Names (last 5 visible)
-    # This logic remains the same as the original script targets all of them anyway
-    all_y8x4pc_spans = soup.find_all('span', class_='Y8X4Pc')
+    found_candidates = []
+    
+    # --- Album Name Search (div.DgVY7) REMOVED FROM LIVE SCRIPT ---
+    # We still show the raw data for debugging purposes, but the live script ignores it.
+    all_dgvy7_divs = sidebar_root.find_all('div', class_='DgVY7')
+    if all_dgvy7_divs:
+        print(f"\n[DEBUG] Found {len(all_dgvy7_divs)} primary name (Album) candidates (DgVY7) - IGNORED BY LIVE SCRIPT:")
+        for i, dgvy7_div in enumerate(all_dgvy7_divs):
+            name_div = dgvy7_div.find('div', class_='AJM7gb')
+            if name_div and name_div.text:
+                 print(f"  {i+1} (IGNORED): '{name_div.text.strip()}'")
+            else:
+                print(f"  {i+1} (IGNORED): Not found or empty.")
+    # -----------------------------------------------------------------
+
+    # 1. Target: Span-based Names (People/Place Tags)
+    all_y8x4pc_spans = sidebar_root.find_all('span', class_='Y8X4Pc')
     span_candidates = []
     
     if all_y8x4pc_spans:
         # The script looks at the last 5 elements
         spans_to_check = all_y8x4pc_spans[-5:] 
         
-        print(f"\nContextual Names (Target span.Y8X4Pc - checking last {len(spans_to_check)}):")
+        print(f"\nContextual Names (Target span.Y8X4Pc - checking last {len(spans_to_check)} spans):")
+        
+        # Display the raw text found from the targeted elements
+        raw_names_found_total = []
         
         for i, span in enumerate(spans_to_check):
             text = span.text.strip()
+            
             if text:
-                # Assuming non-empty text means it would pass the visibility check in the real script
-                span_candidates.append(text)
-                print(f"  {i+1}: '{text}'")
+                is_hidden = is_element_visually_hidden(span)
+                
+                status_tag = "(VISIBLE/PROCESSED)"
+                if is_hidden:
+                    status_tag = "(HIDDEN/IGNORED)"
+                
+                # Report all names found, but only add visible ones to the candidates list
+                raw_names_found_total.append(text)
+                print(f"  Raw Text {i+1}: '{text}' {status_tag}") 
+                
+                if not is_hidden:
+                    span_candidates.append(text)
+        
+        # Print the final list of candidates that will be fed into the simulation
+        print(f"\nCandidates passed to Simulation (filtered): {span_candidates if span_candidates else '[]'}")
         
         found_candidates.extend(span_candidates)
         
-        if not span_candidates and not primary_candidates:
-             print("  None of the last 5 spans contained visible text.")
+        if not span_candidates:
+             print("  None of the last spans passed the visibility check.")
     else:
-        print("\nContextual Names (Target span.Y8X4Pc): No matching spans found.")
+        print("\nContextual Names (Target span.Y8X4Pc): No matching spans found in scope.")
 
     print("@"*50)
     return found_candidates
@@ -200,6 +292,8 @@ def simulate_name_processing(candidates, current_desc):
     # We must iterate over the full list of candidates found, as the filtering 
     # logic depends on the order of iteration.
     for original_name in candidates:
+        print(f"\n[PROCESS] Checking candidate: '{original_name}'")
+        
         name_to_check = ' '.join(original_name.split())
         
         # 1. Year/Digit Prefix Check (e.g., skips '2022...')
@@ -283,7 +377,7 @@ def find_other_contextual_info(soup):
 
 def main():
     """
-    Main execution function to handle command line arguments and run the analysis.
+    Main execution function to run the analysis.
     """
     # 1. Check for the BeautifulSoup dependency first
     try:
@@ -293,22 +387,21 @@ def main():
         print("You must install it using: pip install beautifulsoup4")
         sys.exit(1)
         
-    # 2. Check for the correct number of command-line arguments (only HTML file is needed now)
-    if len(sys.argv) < 2:
-        print("Usage: ./dump-explorer.py <path_to_html_dump>")
-        print("Example: ./dump-explorer.py gphotos_dump_1763247510.html")
+    html_file_path = TARGET_HTML_FILE
+    
+    # Check if the file exists
+    if not os.path.exists(html_file_path):
+        print(f"Error: The target file '{html_file_path}' does not exist.")
         sys.exit(1)
         
-    html_file_path = sys.argv[1]
-    
-    # 3. Run the main analysis functions
+    # 2. Run the main analysis functions
     
     # Find Textarea Info and Current Description
-    div_info_list, soup, current_desc = find_textarea_div_info(html_file_path)
+    div_info_list, soup, current_desc, target_textarea = find_textarea_div_info(html_file_path)
     
     if soup:
         # Find Injected Name Candidates
-        candidates = find_injected_name_candidates(soup)
+        candidates = find_injected_name_candidates(soup, target_textarea)
         
         # Simulate Processing Logic
         simulate_name_processing(candidates, current_desc)
