@@ -664,7 +664,7 @@ class BrowserController:
 
             # JS logic to extract all candidates with visibility check
             # CRITICAL CHANGE: Search entire document, not just sidebar
-            js_find_names = """() => {
+            js_find_names = r"""() => {
             let foundNames = [];
 
             // Helper function to check if element is visually hidden

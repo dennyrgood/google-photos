@@ -275,7 +275,7 @@ class AssistantUI:
         # If it's a printable character (not a special key) and not a control combo
         # Reserved keys: numbers 1-9 and '=' only
         # Letters (including n, N, p, P) pass through as natural keystrokes
-        reserved_keys = {'=', '1', '2', '3', '4', '5', '6', '7', '8', '9'}
+        reserved_keys = {'=', '1', '2', '3', '4', '5', '6', '7', '8', '9', '!', '@', '#', '$', '%', '^', '&', '*', '(', ')'}
         if len(key) == 1 and key.isprintable() and not ctrl_pressed and event.char and key not in reserved_keys:
             print(f'[KEYSTROKE] Sending "{key}" directly to web page')
             self.browser.send_keystroke(key)
@@ -291,13 +291,17 @@ class AssistantUI:
         if action:
             action_type, action_data = action
             print(f'[SHORTCUT] Key "{key}" (ctrl={ctrl_pressed}, state={event.state}) -> {action_type}: {action_data}')
-    
+
             if action_type == 'next':
                 self.next_photo()
             elif action_type == 'prev':
                 self.prev_photo()
             elif action_type == 'name':
                 self.add_name(action_data)
+            elif action_type == 'name_and_next':
+                # NEW: Add name and immediately go to next photo
+                self.add_name(action_data)
+                self.next_photo()
             # 'space' action removed - no-op
             elif action_type == 'backspace':
                 self.do_backspace()

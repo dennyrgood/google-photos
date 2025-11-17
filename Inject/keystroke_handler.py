@@ -33,7 +33,7 @@ class KeystrokeHandler:
         self.shortcuts['='] = ('delete_all', None)
 
         # Cursor to end DHM
-        self.shortcuts['-'] = ('cursor_to_end', None)   # DHM
+        self.shortcuts['-'] = ('cursor_to_end', None)
         
         # Tab to add "Dennis " and go next
         self.shortcuts['Tab'] = ('tab_dennis', None)
@@ -43,6 +43,20 @@ class KeystrokeHandler:
         # Load names from names.json
         names = self._load_names()
         self.names_list = names  # Store for UI
+
+        # Map shifted number keys to their unshifted counterparts
+        SHIFTED_NUMBER_MAP = {
+            '!': '1',
+            '@': '2',
+            '#': '3',
+            '$': '4',
+            '%': '5',
+            '^': '6',
+            '&': '7',
+            '*': '8',
+            '(': '9',
+            ')': '0'
+        }
         
         for raw in names:
             label = raw
@@ -51,23 +65,30 @@ class KeystrokeHandler:
             match = re.search(r'\((.)\)', label)
             if match:
                 shortcut_key = match.group(1)
-                # Only register Ctrl+letter shortcuts (not single letters - those are for natural typing)
+                # Register Ctrl+lowercase -> just add name
                 self.shortcuts[(shortcut_key.lower(), 'ctrl')] = ('name', pushed)
-                self.shortcuts[(shortcut_key.upper(), 'ctrl')] = ('name', pushed)
-                print(f'[KEYSTROKE] Registered Ctrl+{shortcut_key} -> {pushed}')
+                # Register Ctrl+UPPERCASE -> add name and advance
+                self.shortcuts[(shortcut_key.upper(), 'ctrl')] = ('name_and_next', pushed)
+                print(f'[KEYSTROKE] Registered Ctrl+{shortcut_key.lower()} -> {pushed}')
+                print(f'[KEYSTROKE] Registered Ctrl+{shortcut_key.upper()} -> {pushed} + NEXT')
             
             # Extract numbered groups like "(1) Dennis Laura " and strip numeric prefix
             num_match = re.search(r'\((\d+)\)', label)
             if num_match:
                 group_num = num_match.group(1)
                 # Strip the numeric prefix from the label first, then remove parentheses
-                # e.g., "(1) Dennis Laura " becomes "Dennis Laura "
                 stripped_label = re.sub(r'^\(\d+\)\s*', '', label).strip()
                 if stripped_label:  # Only register if there's content after stripping
-                    # Register both Ctrl+number and just number
+                    # Register Ctrl+number and just number -> just add name
                     self.shortcuts[(group_num, 'ctrl')] = ('name', stripped_label + ' ')
                     self.shortcuts[group_num] = ('name', stripped_label + ' ')
                     print(f'[KEYSTROKE] Registered {group_num} -> {stripped_label} (stripped)')
+                    
+                    # Register shifted version -> add name and advance
+                    shifted_symbol = [k for k, v in SHIFTED_NUMBER_MAP.items() if v == group_num]
+                    if shifted_symbol:
+                        self.shortcuts[shifted_symbol[0]] = ('name_and_next', stripped_label + ' ')
+                        print(f'[KEYSTROKE] Registered {shifted_symbol[0]} -> {stripped_label} + NEXT')
                 else:
                     # Empty group, register as-is
                     self.shortcuts[(group_num, 'ctrl')] = ('name', pushed)
