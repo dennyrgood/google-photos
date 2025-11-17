@@ -17,38 +17,29 @@ class AssistantUI:
         
         root.title('Google Photos Tagger - Old Device Mode')
         
-        # Position window at bottom of screen
-        root.update_idletasks()  # Ensure geometry is calculated
-        screen_width = root.winfo_screenwidth()
-        screen_height = root.winfo_screenheight()
-        
         # Main frame
-        main = ttk.Frame(root, padding=5)
+        main = ttk.Frame(root, padding=10)
         main.grid(row=0, column=0, sticky='nsew')
 
         # ROW 0: Navigation and control buttons
         nav_frame = ttk.Frame(main)
-        nav_frame.grid(row=0, column=0, columnspan=4, sticky='ew', pady=(0, 4))
+        nav_frame.grid(row=0, column=0, columnspan=4, sticky='ew', pady=(0, 8))
         # keep a reference so other methods can add/remove debug buttons later
         self.nav_frame = nav_frame
 
         self.launch_default_btn = ttk.Button(nav_frame, text='LAUNCH', 
-                                              command=lambda: self.launch_with_mode('default'),
-                                              width=8)
-        self.launch_default_btn.grid(row=0, column=0, sticky='ew', padx=1)
+                                              command=lambda: self.launch_with_mode('default'))
+        self.launch_default_btn.grid(row=0, column=0, sticky='ew', padx=2)
 
-        self.prev_btn = ttk.Button(nav_frame, text='← PREV', command=self.prev_photo, 
-                                    state='disabled', width=8)
-        self.prev_btn.grid(row=0, column=1, sticky='ew', padx=1)
+        self.prev_btn = ttk.Button(nav_frame, text='← PREV', command=self.prev_photo, state='disabled')
+        self.prev_btn.grid(row=0, column=1, sticky='ew', padx=2)
 
-        self.next_btn = ttk.Button(nav_frame, text='NEXT →', command=self.next_photo, 
-                                    state='disabled', width=8)
-        self.next_btn.grid(row=0, column=2, sticky='ew', padx=1)
+        self.next_btn = ttk.Button(nav_frame, text='NEXT →', command=self.next_photo, state='disabled')
+        self.next_btn.grid(row=0, column=2, sticky='ew', padx=2)
 
         # DEBUG toggle button (always visible)
-        self.debug_toggle_btn = ttk.Button(nav_frame, text='DEBUG', command=self.toggle_debug,
-                                            width=8)
-        self.debug_toggle_btn.grid(row=0, column=3, sticky='ew', padx=1)
+        self.debug_toggle_btn = ttk.Button(nav_frame, text='DEBUG', command=self.toggle_debug)
+        self.debug_toggle_btn.grid(row=0, column=3, sticky='ew', padx=2)
         
         # Set initial button appearance based on debug_mode
         if self.debug_mode:
@@ -57,25 +48,21 @@ class AssistantUI:
             except:
                 self.debug_toggle_btn.config(text='DEBUG ✓')  # Fallback if style not available
 
-        self.backspace_btn = ttk.Button(nav_frame, text='⌫ BACK', command=self.do_backspace, 
-                                        state='disabled', width=8)
-        self.backspace_btn.grid(row=0, column=4, sticky='ew', padx=1)
+        self.backspace_btn = ttk.Button(nav_frame, text='⌫ BACK', command=self.do_backspace, state='disabled')
+        self.backspace_btn.grid(row=0, column=4, sticky='ew', padx=2)
         
-        self.reload_btn = ttk.Button(nav_frame, text='↻ RELOAD', command=self.reload_names, 
-                                     state='disabled', width=8)
-        self.reload_btn.grid(row=0, column=5, sticky='ew', padx=1)
+        self.reload_btn = ttk.Button(nav_frame, text='↻ RELOAD', command=self.reload_names, state='disabled')
+        self.reload_btn.grid(row=0, column=5, sticky='ew', padx=2)
         
         # Debug buttons (optional) - create only if debug_mode at init, otherwise create lazily
         debug_col = 6
         if self.debug_mode:
-            self.dump_btn = ttk.Button(self.nav_frame, text='DUMP', command=self.dump_html, 
-                                       state='disabled', width=6)
-            self.dump_btn.grid(row=0, column=debug_col, sticky='ew', padx=1)
+            self.dump_btn = ttk.Button(self.nav_frame, text='DUMP', command=self.dump_html, state='disabled')
+            self.dump_btn.grid(row=0, column=debug_col, sticky='ew', padx=2)
             debug_col += 1
 
-            self.sum_btn = ttk.Button(self.nav_frame, text='SUM', command=self.dump_analysis, 
-                                      state='disabled', width=6)
-            self.sum_btn.grid(row=0, column=debug_col, sticky='ew', padx=1)
+            self.sum_btn = ttk.Button(self.nav_frame, text='SUM', command=self.dump_analysis, state='disabled')
+            self.sum_btn.grid(row=0, column=debug_col, sticky='ew', padx=2)
             debug_col += 1
         
         for i in range(debug_col):
@@ -83,7 +70,7 @@ class AssistantUI:
 
         # ROW 1: Name shortcut buttons
         self.shortcut_frame = ttk.Frame(main)
-        self.shortcut_frame.grid(row=1, column=0, columnspan=4, sticky='ew', pady=(0, 4))
+        self.shortcut_frame.grid(row=1, column=0, columnspan=4, sticky='ew', pady=(0, 8))
         
         self.name_buttons = []
         self._create_name_buttons()
@@ -130,14 +117,6 @@ class AssistantUI:
         
         print('[UI] Starting poll loop')
         self.poll_browser_state()
-        
-        # Position window at bottom after all widgets are created
-        root.update_idletasks()
-        window_width = root.winfo_reqwidth()
-        window_height = root.winfo_reqheight()
-        x_position = (screen_width - window_width) // 2
-        y_position = screen_height - window_height - 50  # 50px from bottom for taskbar
-        root.geometry(f'+{x_position}+{y_position}')
     
     def _create_name_buttons(self):
         """Create name shortcut buttons from keystroke handler's names list.
@@ -164,9 +143,8 @@ class AssistantUI:
             
             btn = ttk.Button(self.shortcut_frame, text=label, 
                             command=(lambda p=pushed: self.add_name(p)), 
-                            state='disabled' if not self.browser._running else 'normal',
-                            width=10)
-            btn.grid(row=0, column=idx, sticky='ew', padx=1, pady=1)
+                            state='disabled' if not self.browser._running else 'normal')
+            btn.grid(row=0, column=idx, sticky='ew', padx=2, pady=2)
             self.name_buttons.append(btn)
         
         # Configure columns for row 0
@@ -183,9 +161,8 @@ class AssistantUI:
             
             btn = ttk.Button(self.shortcut_frame, text=label, 
                             command=(lambda p=pushed: self.add_name(p)), 
-                            state='disabled' if not self.browser._running else 'normal',
-                            width=12)
-            btn.grid(row=1, column=idx, sticky='ew', padx=1, pady=1)
+                            state='disabled' if not self.browser._running else 'normal')
+            btn.grid(row=1, column=idx, sticky='ew', padx=2, pady=2)
             self.name_buttons.append(btn)
         
         # Configure columns for row 1
@@ -242,17 +219,15 @@ class AssistantUI:
             # Show or lazily create debug buttons (READ removed)
             col = self.nav_frame.grid_size()[0]
             if not hasattr(self, 'dump_btn'):
-                self.dump_btn = ttk.Button(self.nav_frame, text='DUMP', command=self.dump_html, 
-                                           state='disabled', width=6)
-                self.dump_btn.grid(row=0, column=col, sticky='ew', padx=1)
+                self.dump_btn = ttk.Button(self.nav_frame, text='DUMP', command=self.dump_html, state='disabled')
+                self.dump_btn.grid(row=0, column=col, sticky='ew', padx=2)
                 col += 1
             else:
                 self.dump_btn.grid()
 
             if not hasattr(self, 'sum_btn'):
-                self.sum_btn = ttk.Button(self.nav_frame, text='SUM', command=self.dump_analysis, 
-                                          state='disabled', width=6)
-                self.sum_btn.grid(row=0, column=col, sticky='ew', padx=1)
+                self.sum_btn = ttk.Button(self.nav_frame, text='SUM', command=self.dump_analysis, state='disabled')
+                self.sum_btn.grid(row=0, column=col, sticky='ew', padx=2)
             else:
                 self.sum_btn.grid()
 
@@ -298,7 +273,7 @@ class AssistantUI:
         key = event.char if event.char else keysym
         
         # If it's a printable character (not a special key) and not a control combo
-        # Reserved keys: numbers 1-9 and '=' and shifted number symbols
+        # Reserved keys: numbers 1-9 and '=' only
         # Letters (including n, N, p, P) pass through as natural keystrokes
         reserved_keys = {'=', '1', '2', '3', '4', '5', '6', '7', '8', '9', '!', '@', '#', '$', '%', '^', '&', '*', '(', ')'}
         if len(key) == 1 and key.isprintable() and not ctrl_pressed and event.char and key not in reserved_keys:
@@ -324,7 +299,7 @@ class AssistantUI:
             elif action_type == 'name':
                 self.add_name(action_data)
             elif action_type == 'name_and_next':
-                # Add name and immediately go to next photo
+                # NEW: Add name and immediately go to next photo
                 self.add_name(action_data)
                 self.next_photo()
             # 'space' action removed - no-op
@@ -360,6 +335,7 @@ class AssistantUI:
                 print(f'[LAUNCH] ERROR: {e}')
                 import traceback
                 traceback.print_exc()
+                #self.root.after(0, lambda: messagebox.showerror('Error', str(e)))
                 error_msg = str(e)
                 self.root.after(0, lambda msg=error_msg: messagebox.showerror('Error', msg))
 
@@ -401,6 +377,9 @@ class AssistantUI:
     def prev_photo(self):
         """Go to previous photo."""
         threading.Thread(target=self.browser.goto_prev_photo, daemon=True).start()
+    # read_current removed — READ debug button and handler deleted
+
+    # add_x removed per Visual Studio deletion instructions
 
     def do_backspace(self):
         """Send backspace to browser."""
